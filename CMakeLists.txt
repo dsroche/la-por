@@ -1,0 +1,51 @@
+#
+# CMake file for cleaned up Integrity project
+# Mike Hanling
+#
+
+cmake_minimum_required(VERSION 3.13)
+
+# define project
+project(integrity VERSION 0.1
+	DESCRIPTION "matrix-based PoR scheme"
+	LANGUAGES C
+	)
+
+# find required libraries (ssl and crypto combined)
+find_package(OpenSSL 1.1.1 REQUIRED)
+find_package(MPI REQUIRED)
+
+# set variables
+set(CC "gcc")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Ofast -march=native -std=gnu99 -Wno-missing-prototypes -g")
+set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin)
+
+# link merkle subdir
+add_subdirectory(merkle)
+add_subdirectory(tinymt64)
+
+# allow CMake to see the header files
+include_directories(include merkle/include tinymt64/include
+	${OPENSSL_INCLUDE_DIRS} ${MPI_C_INCLUDE_DIRS})
+
+# variable SOURCES now holds all of the executables desired
+# file(GLOB SOURCES "src/*.c")
+
+# declare executables
+set(EXECS client server client_init server_init slim_vhash)
+foreach(EXEC IN LISTS EXECS)
+	add_executable(${EXEC} src/${EXEC}.c)
+	target_link_libraries(${EXEC} merkle)
+	target_link_libraries(${EXEC} tinymt64)
+	target_link_libraries(${EXEC} ${OPENSSL_LIBRARIES})
+	target_link_libraries(${EXEC} m)
+endforeach()
+
+# declare executables that use MPI
+#set(MPI_C_COMPILER "mpicc")
+set(MPI_EXECS mult_mpi)
+foreach(MPI_EXEC IN LISTS MPI_EXECS)
+	add_executable(${MPI_EXEC} src/${MPI_EXEC}.c)
+	target_link_libraries(${MPI_EXEC} ${MPI_C_LIBRARIES})
+endforeach()
+
