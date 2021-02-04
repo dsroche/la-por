@@ -68,6 +68,7 @@ while read -u4 ident numruns cmd; do
     bgid=$numruns
     echo "Killing background process $bgid"
     kill "${bgpids["$bgid"]}"
+    sleep 1
     unset "bgpids[$bgid]"
     rm -f "$bgout"
     unset "bgout"
