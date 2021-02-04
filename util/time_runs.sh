@@ -66,7 +66,6 @@ while read -u4 ident numruns cmd; do
     echo "Killing background process $bgid"
     kill "${bgpids["$bgid"]}"
     unset "bgpids[$bgid]"
-    echo "bgpids is now ${!bgpids[@]}"
   else
     if [[ -z $cmd ]]; then
       echo "ERROR: invalid cmdfile line: $ident $numruns $cmd"

@@ -8,10 +8,11 @@ Linear algebra-based Proof of Retrievability protocol for ensuring data integrit
 	- MPI
 	- OpenSSL (minimum 1.1.1.1f)
 	- CMake (minimum 3.13)
+        - For testing: GNU time, bc, bash
 
     On Debian, based systems, you can get all these by running (as root)
 
-        apt install cmake libssl-dev openmpi-bin
+        apt install cmake libssl-dev openmpi-bin time bc
 
 *   Sub-packaged software components
     (no extra download needed, just crediting the authors!):
