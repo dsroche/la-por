@@ -75,7 +75,7 @@ int main(int argc, char* argv[]) {
 				verbose = 1;
 				break;
 
-			case '?':
+			case 'h':
 				usage(argv[0]);
 				exit(1);
 
@@ -176,7 +176,7 @@ done_opts:
 					fprintf(stderr, "Entering Audit Mode...\n");
 
 					// exec audit protocol and close
-					char* args[] = {"mpirun", "-v", "-np", "1", "mult_mpi", argv[optind], NULL};
+					char* args[] = {"mpirun", "-v", "-np", "1", "bin/mult_mpi", argv[optind], NULL};
 					if (hostfile) {
 						args[2] = "-hostfile";
 						args[3] = hostfile;

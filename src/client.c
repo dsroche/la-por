@@ -75,7 +75,7 @@ int main(int argc, char* argv[]) {
 				verbose = 1;
 				break;
 
-			case '?':
+                        case 'h': case '?':
 				usage(argv[0]);
 				exit(1);
 

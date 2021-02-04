@@ -13,7 +13,9 @@ Linear algebra-based Proof of Retrievability protocol for ensuring data integrit
 
         apt install cmake libssl-dev openmpi-bin
 
-*   Credit (sub-packaged software components)
+*   Sub-packaged software components
+    (no extra download needed, just crediting the authors!):
+
 	- [TinyMT](https://github.com/MersenneTwister-Lab/TinyMT)
 	- [Flint](http://flintlib.org/)
 
@@ -49,4 +51,16 @@ Linear algebra-based Proof of Retrievability protocol for ensuring data integrit
             bin/server_init /path/to/datafile /path/to/server_config /path/to/merkle_config /path/to/merke_tree
             ```
 
+        6.  Start server
 
+            ```bash
+            # note, server must be run from build directory because of MPI
+            bin/server [-p PORT] [-h MPI_HOSTFILE] /path/to/server_config /path/to/merkle_config
+            ```
+
+        7.  Connect with client
+
+            ```bash
+            bin/client [-s SERVER_HOSTNAME] [-p PORT] /path/to/client_config /path/to/merkle_config
+            # follow screen prompts to audit, read, or update
+            ```
