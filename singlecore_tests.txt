@@ -18,9 +18,9 @@ sha_10g      5 sha256sum store/data/10g.dat
 create_100g  1 bin/random_file -s 1234 store/data/100g.dat 100g
 init0_100g   1 bin/dual_init store/data/100g.dat store/cconf/100g.dat store/sconf/100g.dat store/mconf/100g.dat store/mtree/100g.dat
 init_100g    4 bin/dual_init store/data/100g.dat trash/a trash/b trash/c trash/d
-BG    serv_100gbin/server -n 1 store/sconf/100g.dat store/mconf/100g.dat
+BG   serv_100g bin/server -n 1 store/sconf/100g.dat store/mconf/100g.dat
 audit_100g   5 bin/client -a store/cconf/100g.dat store/mconf/100g.dat
-KILL  serv_100g
+KILL serv_100g
 md5_100g     5 md5sum store/data/100g.dat
 sha_100g     5 sha256sum store/data/100g.dat
 create_1t    1 bin/random_file -s 1234 store/data/1t.dat 1t
