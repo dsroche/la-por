@@ -64,3 +64,13 @@ Linear algebra-based Proof of Retrievability protocol for ensuring data integrit
             bin/client [-s SERVER_HOSTNAME] [-p PORT] /path/to/client_config /path/to/merkle_config
             # follow screen prompts to audit, read, or update
             ```
+
+*   Recreate tests from the paper
+
+    -   Single-core init/audit/checksums to directory `singlecore_results`:
+
+        **CAUTION**: This will create a 1TB file (among others) and take many hours to run...
+
+        ```bash
+        ../util/time_runs.sh ../singlecore_tests.txt ../singlecore_results
+        ```

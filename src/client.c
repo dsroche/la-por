@@ -14,6 +14,7 @@ void usage(const char* arg0) {
 	fprintf(stderr, "usage: %s [OPTIONS] [<config_file>] [<merkle_config_file>]\n"
 			"	-s --serverIP		IP address of the cloud server; defaults to 'localhost'\n"
 			"	-p --port			port over which to connect with cloud server; defaults to 2020\n"
+			"	-a --audit		run an audit (non-interatively)\n"
 			"	-v --verbose		verbose mode\n"
 			"	-h --help			show this help menu\n"
 			, arg0);
@@ -41,18 +42,20 @@ int main(int argc, char* argv[]) {
 	double client_comp_time = 0;
 	double comm_time = 0;
 	int trash;
+	int audit = 0;
 
 	// handle command line arguments
 	struct option longopts[] = {
 		{"serverIP", required_argument, NULL, 's'},
 		{"port", required_argument, NULL, 'p'},
+		{"audit", no_argument, NULL, 'a'},
 		{"verbose", no_argument, NULL, 'v'},
 		{"help", no_argument, NULL, 'h'},
 		{NULL, 0, NULL, 0}
 	};
 
 	while (true) {
-		switch (getopt_long(argc, argv, "s:p:vh", longopts, NULL)) {
+		switch (getopt_long(argc, argv, "s:p:avh", longopts, NULL)) {
 			case -1:
 				goto done_opts;
 
@@ -69,6 +72,10 @@ int main(int argc, char* argv[]) {
 
 			case 'p':
 				port = atoi(optarg);
+				break;
+
+			case 'a':
+				audit = 1;
 				break;
 
 			case 'v':
@@ -135,14 +142,19 @@ done_opts:
 	// convert socket to file
 	FILE* sock = fdopen(sockfd, "r+");
 
-	// ask user for which operation
-	printf("(1) Audit\n"
-			 "(2) Retrieve\n"
-			 "(3) Update\n"
-			 "Specify Operation: ");
 	char op;
-	while (scanf(" %c", &op) != 1) {
-		fprintf(stderr, "Operation not read\n");
+	if (audit) {
+		op = '1';
+	}
+	else {
+		// ask user for which operation
+		printf("(1) Audit\n"
+				"(2) Retrieve\n"
+				"(3) Update\n"
+				"Specify Operation: ");
+		while (scanf(" %c", &op) != 1) {
+			fprintf(stderr, "Operation not read\n");
+		}
 	}
 
 	switch(op) {

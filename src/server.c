@@ -19,6 +19,7 @@ void usage(const char* arg0) {
 	fprintf(stderr, "usage: %s [OPTIONS] [<config_file>] [<merkle_config_file>]\n"
 			"	-p --port			port over which to connect with cloud server; defaults to 2020\n"
 			"	-m --MPIhosts		path to hostfile for MPI, giving IPs and allocations of machines\n"
+                        "	-n --numslots           number of parallel MPI slots to use (-np option in MPI)\n"
 			"	-v --verbose		verbose mode\n"
 			"	-h --help			show this help menu\n"
 			, arg0);
@@ -43,6 +44,7 @@ int main(int argc, char* argv[]) {
 	short port = 2020; /*defaults to 2020*/
 	int verbose = 0; /*defaults to off*/
 	char* hostfile = NULL;
+	char* np = NULL;
 
 	// register handler and make it run at exit as well
 	signal(SIGINT, handler);
@@ -53,13 +55,14 @@ int main(int argc, char* argv[]) {
 	struct option longopts[] = {
 		{"port", required_argument, NULL, 'p'},
 		{"MPIhosts", required_argument, NULL, 'm'},
+                {"numslots", required_argument, NULL, 'n'},
 		{"verbose", no_argument, NULL, 'v'},
 		{"help", no_argument, NULL, 'h'},
 		{NULL, 0, NULL, 0}
 	};
 
 	while (true) {
-		switch (getopt_long(argc, argv, "p:m:vh", longopts, NULL)) {
+		switch (getopt_long(argc, argv, "p:m:n:vh", longopts, NULL)) {
 			case -1:
 				goto done_opts;
 
@@ -69,6 +72,10 @@ int main(int argc, char* argv[]) {
 
 			case 'm':
 				hostfile = optarg;
+				break;
+
+			case 'n':
+				np = optarg;
 				break;
 
 			case 'v':
@@ -176,10 +183,14 @@ done_opts:
 					fprintf(stderr, "Entering Audit Mode...\n");
 
 					// exec audit protocol and close
-					char* args[] = {"mpirun", "-v", "-np", "1", "bin/mult_mpi", argv[optind], NULL};
+					char* args[] = {"mpirun", "-v", "-host", "localhost", "--map-by", "ppr:1:core", "bin/mult_mpi", argv[optind], NULL};
 					if (hostfile) {
 						args[2] = "-hostfile";
 						args[3] = hostfile;
+					}
+					if (np) {
+						args[4] = "-np";
+						args[5] = np;
 					}
 					dup2(clientfd, 1); // dup client to stdin so mpi can pass it
 					dup2(clientfd, 0); // dido but for stdout
