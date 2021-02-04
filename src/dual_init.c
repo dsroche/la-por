@@ -12,11 +12,12 @@
 int main(int argc, char* argv[]) {
 	// arguments checks
 	if (argc < 6) {
-		printf("USAGE: ./slim_vhash <input_data> "
-					"<output_client_config> "
-					"<output_server_config> "
-					"<output_merkle_config> "
-					"<output_merkle_tree>\n");
+		printf("USAGE: %s <input_data> "
+			"<output_client_config> "
+			"<output_server_config> "
+			"<output_merkle_config> "
+			"<output_merkle_tree>\n",
+			argv[0]);
 		return 1;
 	}
 
