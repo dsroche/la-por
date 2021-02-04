@@ -42,23 +42,26 @@ fi
 mkdir -pv "$outdir"
 
 tmpdir=$(mktemp -d --tmpdir timeruns.XXXXXXX)
-tmp_stdout="$tmpdir/.temp_stdout"
-tmp_stderr="$tmpdir/.temp_stderr"
-tmp_time1="$tmpdir/.temp_time1"
-tmp_time2="$tmpdir/.temp_time2"
+tmp_stdout="$tmpdir/temp_stdout"
+tmp_stderr="$tmpdir/temp_stderr"
+tmp_time1="$tmpdir/temp_time1"
+tmp_time2="$tmpdir/temp_time2"
+tmp_bgout="$tmpdir/temp_bgout"
 function cleanup {
   rm -rf "$tmpdir"
 }
 trap cleanup EXIT
 
 declare -A bgpids
+unset bgout
 
 exec 4<"$cmdfile"
 while read -u4 ident numruns cmd; do
   if [[ $ident = "BG" ]]; then
     bgid=$numruns
     echo "Starting background process $bgid"
-    $cmd >/dev/null 2>&1 &
+    bgout="$tmpdir/bg-$bgid.out"
+    $cmd >"$bgout" 2>&1 &
     bgpids["$bgid"]=$!
     sleep 1
   elif [[ $ident = "KILL" ]]; then
@@ -66,6 +69,8 @@ while read -u4 ident numruns cmd; do
     echo "Killing background process $bgid"
     kill "${bgpids["$bgid"]}"
     unset "bgpids[$bgid]"
+    rm -f "$bgout"
+    unset "bgout"
   else
     if [[ -z $cmd ]]; then
       echo "ERROR: invalid cmdfile line: $ident $numruns $cmd"
@@ -78,11 +83,18 @@ while read -u4 ident numruns cmd; do
           continue
         fi
       fi
+      if [[ -v "bgout" ]]; then
+        tail -c0 -f "$bgout" >"$tmp_bgout" &
+        tailer=$!
+      fi
       echo "running $ident ($i of $numruns)"
       set +e
       /usr/bin/time --quiet -f '%e %S %U' -o "$tmp_time1" /usr/bin/time -v -o "$tmp_time2" $cmd >"$tmp_stdout" 2>"$tmp_stderr"
       ecode=$?
       set -e
+      if [[ -v "bgout" ]]; then
+        kill -INT "$tailer"
+      fi
       exec 5<"$tmp_time1"
       read -u5 wall user sys
       exec 5<&-
@@ -92,12 +104,22 @@ while read -u4 ident numruns cmd; do
         echo
         echo "Verbose time output:"
         cat "$tmp_time2"
-        echo
-        echo "stdout:"
-        cat "$tmp_stdout"
-        echo
-        echo "stderr:"
-        cat "$tmp_stderr"
+        if [[ -s $tmp_stdout ]]; then
+          echo
+          echo "stdout:"
+          cat "$tmp_stdout"
+        fi
+        if [[ -s $tmp_stderr ]]; then
+          echo
+          echo "stderr:"
+          cat "$tmp_stderr"
+        fi
+        if [[ -s $tmp_bgout ]]; then
+          echo
+          echo "background output:"
+          cat "$tmp_bgout"
+          rm -f "$tmp_bgout"
+        fi
         echo
         if [[ $ecode -eq 0 ]]; then
           echo "$finishline"
