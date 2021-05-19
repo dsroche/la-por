@@ -27,7 +27,7 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
     using FE_ptr = typename Field::Element_ptr;
 
     FFLAS::Timer chrono;
-        // Generating the matrix DB
+        // Generating a square matrix DB
     typename Field::Element_ptr ffmat;
     size_t m=size;
     size_t k=size;
@@ -88,7 +88,8 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
 
         //--------------------
         // Starting AUDIT
-        //   AUDIT.1: Client generates XX and sends it to the Server
+        //   AUDIT.1: Client challenge
+        //            Client generates XX and sends it to the Server
     chrono.start();
     FE_ptr xx = FFLAS::fflas_new(F,1,size);
     FFLAS::frand(F, Rand, size, xx, 1);
@@ -96,7 +97,8 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
     timeaudit += chrono.usertime();
 
         //--------------------
-        //   AUDIT.2: Server responds with YY
+        //   AUDIT.2: Server response
+        //            Server responds with YY
     chrono.start(); 
     {
         FE_ptr yy = FFLAS::fflas_new(F,1,size);
@@ -113,7 +115,8 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
     chrono.stop(); timeserver+=chrono.usertime();
 
         //--------------------
-        //   AUDIT.3: Client verifies the Server response
+        //   AUDIT.3: Client verification
+        //            Client verifies the Server response
     chrono.start();
     bool success(false);
 
@@ -123,12 +126,12 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         // 3.2: Receiving the server result
     FE_ptr yy; ReadRaw256(F, size, yy, "/tmp/poryy.bin");
 
-        // 3.4: Computing u^T . y
+        // 3.3: Computing u^T . y
     FE_ptr lhs = FFLAS::fflas_new(F,1,1), rhs = FFLAS::fflas_new(F,1,1);
     FFLAS::ParSeqHelper::Sequential seqH;
     FFLAS::fgemv(F,FFLAS::FflasNoTrans,1,size,F.one,uu,size,yy,1,F.zero,lhs,1,seqH);
 
-        // 3.5a: public verification
+        // 3.4a: public verification
     if (PublicAudit) {
         std::vector<point_t> ww(size);
         ReadPoints(ww, "/tmp/porww.bin");
@@ -163,7 +166,7 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
             std::cerr << "g^{uy}: " << mtmp << std::endl;
         }
 
-        // 3.5: private verification
+        // 3.4b: private verification
     } else {
             // Computing v^T x
         FFLAS::fgemv(F,FFLAS::FflasNoTrans,1,size,F.one,vv,size,xx,1,F.zero,rhs,1,seqH);
@@ -194,7 +197,9 @@ int tmain(){
     srand48(seed);
     Givaro::Integer::seeding(seed);
 
-    Givaro::Integer p("27742317777372353535851937790883648493");
+        //-------------------------
+        // Ristretto255 prime order
+   Givaro::Integer p("27742317777372353535851937790883648493");
     p += Givaro::Integer(1)<<=252;
 
     std::vector<double> timeinit(iters), timeaudit(iters), timeserver(iters);
@@ -204,10 +209,12 @@ int tmain(){
     typename Field::RandIter Rand(F,seed);
 
     bool success=true;
+
+        //-------------------------
+        // private Protocol
     success &= Protocol<Field,false>(timeinit[0], timeaudit[0], timeserver[0], F, Rand, size);
 
     for(size_t i=0; i<iters; ++i) {
-            // private Protocol
         success &= Protocol<Field,false>(timeinit[i], timeaudit[i], timeserver[i], F, Rand, size);
     }
 
@@ -219,10 +226,10 @@ int tmain(){
     std::clog << (1000.*timeserver[iters/2]) << " ms\t: [AUDIT SERVER] [PRIVATE] " << k  << " : " << mediandeviation(timeserver) << "% (" << iters << ')' << std::endl;
     std::clog << (1000.*timeaudit[iters/2]) << " ms\t: [AUDIT CLIENT] [PRIVATE] " << k  << " : " << mediandeviation(timeaudit) << "% (" << iters << ')' << std::endl;
 
-
+        //-------------------------
+        // public Protocol
     success &= Protocol<Field,true>(timeinit[0], timeaudit[0], timeserver[0], F, Rand, size);
     for(size_t i=0; i<iters; ++i) {
-            // public Protocol
         success &= Protocol<Field,true>(timeinit[i], timeaudit[i], timeserver[i], F, Rand, size);
     }
     std::sort(timeinit.begin(),timeinit.end());
