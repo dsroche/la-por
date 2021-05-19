@@ -21,3 +21,20 @@ static inline double stop_time(const struct timespec *tp) {
   diff += (end.tv_nsec - tp->tv_nsec) / 1000000000.0;
   return diff;
 }
+
+static inline void start_cpu_time(struct timespec *tp) {
+  int res;
+  res = clock_gettime(CLOCK_THREAD_CPUTIME_ID, tp);
+  assert (res == 0);
+}
+
+static inline double stop_cpu_time(const struct timespec *tp) {
+  struct timespec end;
+  int res;
+  double diff;
+  res = clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end);
+  assert (res == 0);
+  diff = end.tv_sec - tp->tv_sec;
+  diff += (end.tv_nsec - tp->tv_nsec) / 1000000000.0;
+  return diff;
+}

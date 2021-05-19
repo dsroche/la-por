@@ -23,8 +23,8 @@ int main(int argc, char **argv) {
 	uint64_t nobj, i, nextmval, trash;
 	int id, nt, j, k, ncol, nrow;
 	char *bufm;
-	double comm_time = 0, server_comp_time = 0;
-	struct timespec timer;
+	double comm_time = 0, server_comp_time = 0, server_cpu_time = 0;
+	struct timespec timer, cpu_timer;
 
 	// change dupped clientfd (in) to 4, open as file
 	dup2(0, 4);
@@ -123,6 +123,7 @@ int main(int argc, char **argv) {
 
 		// start timer for server computation time
 		start_time(&timer);						/* START COMP TIMER */
+                start_cpu_time(&cpu_timer);
 
 		// rank 0 divy up the work
 		fprintf(stderr, "total nobj = "_CHUNK_SPECIFIER" over %d processes\n", nobj, nt);
@@ -191,6 +192,7 @@ int main(int argc, char **argv) {
 	// rank 0 reports response vectors to client
 	if (id == 0) {
 		// stop server computation timer
+                server_cpu_time = stop_time(&cpu_timer);
 		server_comp_time = stop_time(&timer);				/* STOP COMP TIMER */
 
 		// write response back to client
@@ -203,7 +205,7 @@ int main(int argc, char **argv) {
 		// receive communication time from client and compute total, print out
 		fread(&comm_time, sizeof(comm_time), 1, clientin);
 		comm_time += stop_time(&timer);					/* STOP COMM TIMER */
-		fprintf(stderr, "***SERVER COMP TIME: %f***\n***COMM TIME: %f***\n", server_comp_time, comm_time);
+		fprintf(stderr, "***SERVER COMP TIME: %f ***\n***CPU TIME: %f ***\n***COMM TIME: %f ***\n", server_comp_time, server_cpu_time, comm_time);
 		
 	}
 

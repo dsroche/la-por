@@ -108,6 +108,10 @@ done_opts:
 		return 3;
 	}
 
+	if (verbose) {
+		printf("Verbose output requested\n");
+	}
+
 	// read in dimensions
 	uint64_t n, m;
 	my_fread(&n, sizeof(uint64_t), 1, fconfig);
