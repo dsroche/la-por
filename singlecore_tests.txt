@@ -30,7 +30,7 @@ audit_1t     1 bin/client -a store/cconf/1t.dat store/mconf/1t.dat
 KILL   serv_1t
 md5_1t       1 md5sum store/data/1t.dat
 sha_1t       1 sha256sum store/data/1t.dat
-init_1t      2 bin/dual_init store/data/1t.dat trash/a trash/b trash/c trash/d
+init_1t      2 bin/dual_init store/data/1t.dat trash/a trash/b trash/c /dev/null
 BG     serv_1t bin/server -n 1 store/sconf/1t.dat store/mconf/1t.dat
 audit_1t     3 bin/client -a store/cconf/1t.dat store/mconf/1t.dat
 KILL   serv_1t
