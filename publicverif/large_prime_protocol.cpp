@@ -122,8 +122,8 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
     FE_ptr yy; ReadRaw256(F, m, yy, "/tmp/poryy.bin");
 
         // 3.3: Computing u^T . y
-    FE_ptr lhs = FFLAS::fflas_new(F,1,1), rhs = FFLAS::fflas_new(F,1,1);
-    FFLAS::fgemv(F,FFLAS::FflasNoTrans,1,m,F.one,uu,m,yy,1,F.zero,lhs,1);
+    typename Field::Element lhs, rhs; F.init(lhs); F.init(rhs);
+    F.assign(lhs, FFLAS::fdot(F, m, uu, 1, yy, 1) );
 
         // 3.4a: public verification
     if (PublicAudit) {
@@ -149,7 +149,7 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
 
 
             // Computing g^{u y}
-        Integer2scalar(sxx, lhs[0]);
+        Integer2scalar(sxx, lhs);
         errors += crypto_scalarmult_ristretto255_base(mtmp._data,sxx._data);
 
             // Checking whether g^{u^T y} == (g^v)^x
@@ -163,12 +163,12 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         // 3.4b: private verification
     } else {
             // Computing v^T x
-        FFLAS::fgemv(F,FFLAS::FflasNoTrans,1,k,F.one,vv,k,xx,1,F.zero,rhs,1);
+        F.assign(rhs, FFLAS::fdot(F, k, vv, 1, xx, 1) );
             // Checking whether u^T y == v^T x
-        success = F.areEqual(lhs[0],rhs[0]);
+        success = F.areEqual(lhs,rhs);
     }
 
-    FFLAS::fflas_delete(uu,vv,xx,yy,lhs,rhs);
+    FFLAS::fflas_delete(uu,vv,xx,yy);
     chrono.stop();
     timeaudit += chrono.usertime();
 

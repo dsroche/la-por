@@ -342,7 +342,8 @@ RowAllocatedRaw256DotProduct(const Field& F, size_t m, size_t k, typename Field:
                            data_in_64s[4*j+3]);
                 //         std::clog << "read: " << A[i] << std::endl;
         }
-        FFLAS::fgemv(F,FFLAS::FflasNoTrans,1,k,F.one,A,k,B,1,F.zero,C+i,1);
+//         FFLAS::fgemv(F,FFLAS::FflasNoTrans,1,k,F.one,A,k,B,1,F.zero,C+i,1);
+        F.assign( C[i], FFLAS::fdot(F,k,A,1,B,1) );
         
     }
     fclose(dataf);
@@ -378,7 +379,7 @@ RowAllocatedRaw256left(const Field& F,
                 //         std::clog << "read: " << A[i] << std::endl;
         }
         
-        FFLAS::faxpy(F, k, *(B+i), A, 1, C, 1);
+        FFLAS::faxpy(F, k, B[i], A, 1, C, 1);
         
     }
     fclose(dataf);
