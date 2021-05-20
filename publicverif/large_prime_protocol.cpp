@@ -32,12 +32,14 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
 
     using FE_ptr = typename Field::Element_ptr;
 
-    FFLAS::Timer chrono;
+    FFLAS::Timer chronoinit, chronoserver, chronoaudit, chronoauditr; 
+    chronoinit.clear(); chronoserver.clear(); 
+    chronoaudit.clear(); chronoauditr.clear();
 
     {
             //--------------------
 			// Client INIT
-        chrono.start();
+        chronoinit.start();
 
             // Random UU and VV=M^T UU
         FE_ptr uu = FFLAS::fflas_new(F,m,1);
@@ -49,7 +51,8 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
             FFLAS::fzero(F, k, vv, 1);
             FE_ptr ffrow;
             AllocateRaw256(F, k, ffrow);
-            RowAllocatedRaw256left(F, m, k, ffrow, uu, vv, DATABASEF_NAME.c_str());
+            RowAllocatedRaw256left(F, m, k, ffrow, uu, vv, 
+                                   DATABASEF_NAME.c_str());
             FFLAS::fflas_delete(ffrow);
         }
         
@@ -77,24 +80,24 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         WriteRaw256(F, k, vv, "/tmp/porvv.bin");
         FFLAS::fflas_delete(vv);
 
-        chrono.stop();
-        timeinit += chrono.usertime();
+        chronoinit.stop();
+        timeinit += chronoinit.realtime();
     }
 
         //--------------------
         // Starting AUDIT
         //   AUDIT.1: Client challenge
         //            Client generates XX and sends it to the Server
-    chrono.start();
+    chronoaudit.start();
     FE_ptr xx = FFLAS::fflas_new(F,k);
     FFLAS::frand(F, Rand, k, xx, 1);
-    chrono.stop();
-    timeaudit += chrono.usertime();
+    chronoaudit.stop();
+    timeaudit += chronoaudit.realtime();
 
         //--------------------
         //   AUDIT.2: Server response
         //            Server responds with YY
-    chrono.start(); 
+    chronoserver.start(); 
     {
         FE_ptr yy = FFLAS::fflas_new(F,m);
         FE_ptr ffrow;
@@ -107,12 +110,12 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         WriteRaw256(F, m, yy, "/tmp/poryy.bin");
         FFLAS::fflas_delete(yy,ffrow);
     }
-    chrono.stop(); timeserver+=chrono.usertime();
+    chronoserver.stop(); timeserver+=chronoserver.usertime();
 
         //--------------------
         //   AUDIT.3: Client verification
         //            Client verifies the Server response
-    chrono.start();
+    chronoauditr.start();
     bool success(false);
 
         // 3.1: Loading the client secrets
@@ -169,11 +172,11 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
     }
 
     FFLAS::fflas_delete(uu,vv,xx,yy);
-    chrono.stop();
-    timeaudit += chrono.usertime();
+    chronoauditr.stop();
+    timeaudit += chronoauditr.usertime();
 
     if (success)
-        std::clog << "Audit\tPASS. \t" << timeinit << ',' << timeserver << ',' << timeaudit << std::endl;
+        std::clog << "Audit\tPASS. \t" << chronoinit << ',' << chronoserver << ',' << (chronoaudit += chronoauditr) << std::endl;
     else
         std::clog << "Audit\tFAIL." << std::endl;
 
