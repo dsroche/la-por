@@ -330,8 +330,43 @@ RowAllocatedRaw256DotProduct(const Field& F, size_t m, size_t k, typename Field:
                            data_in_64s[4*j+3]);
                 //         std::clog << "read: " << A[i] << std::endl;
         }
-        FFLAS::ParSeqHelper::Sequential seqH;
-        FFLAS::fgemv(F,FFLAS::FflasNoTrans,1,k,F.one,A,k,B,1,F.zero,C+i,1,seqH);
+        FFLAS::fgemv(F,FFLAS::FflasNoTrans,1,k,F.one,A,k,B,1,F.zero,C+i,1);
+        
+    }
+    fclose(dataf);
+
+    free(data_buf);
+
+    return C;
+}
+
+
+template<typename Field>
+typename Field::Element_ptr&
+RowAllocatedRaw256left(const Field& F, 
+                       size_t m, size_t k, typename Field::Element_ptr& A,
+                       typename Field::ConstElement_ptr B,
+                       typename Field::Element_ptr& C,
+                       const char * filename = DATAF_NAME) {
+
+    const size_t N(k<<5); // 32 bytes in per element
+    FILE* dataf = fopen(filename, "r");
+    unsigned char* data_buf = reinterpret_cast<unsigned char*>( calloc(N, 1) );
+
+    for (size_t i=0; i<m; i++){
+        
+        fread(data_buf, 1, N, dataf);
+        uint64_t const* data_in_64s = reinterpret_cast<uint64_t const*>(data_buf);
+        for(size_t j=0; j<k; ++j) {
+            scalar2Integer(A[j],
+                           data_in_64s[4*j+0],
+                           data_in_64s[4*j+1],
+                           data_in_64s[4*j+2],
+                           data_in_64s[4*j+3]);
+                //         std::clog << "read: " << A[i] << std::endl;
+        }
+        
+        FFLAS::faxpy(F, k, *(B+i), A, 1, C, 1);
         
     }
     fclose(dataf);
@@ -348,7 +383,7 @@ RowAllocatedRaw256DotProduct(const Field& F, size_t m, size_t k, typename Field:
 
 
 template<typename Vect> double mediandeviation(const Vect& v) {
-    assert(v.size()>1);
+    assert(v.size()>0);
     typename Vect::value_type median(v[v.size()/2]);
     double t1( median-v.front() );
     double t2( v.back()-median );

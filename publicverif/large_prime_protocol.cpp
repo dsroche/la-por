@@ -1,3 +1,7 @@
+
+
+
+
 #include "large_prime_scheme.h"
 
 #include <fflas-ffpack/utils/args-parser.h>
@@ -20,51 +24,42 @@ static Argument as[] = {
     // Running the Public/Private Protocol
 template<typename Field, bool PublicAudit=true>
 bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
-           const Field& F, typename Field::RandIter& Rand, const size_t size) {
+              const Field& F, typename Field::RandIter& Rand, 
+              const size_t m, const size_t k, 
+              const char * filename = DATAF_NAME) {
 
     timeinit=0., timeaudit=0., timeserver=0.;
 
     using FE_ptr = typename Field::Element_ptr;
 
     FFLAS::Timer chrono;
-        // Generating a square matrix DB
-    typename Field::Element_ptr ffmat;
-    size_t m=size;
-    size_t k=size;
-    
 
     {
-            //--------------------
-            // Database Generation
-        chrono.start();
-        ffmat = FFLAS::fflas_new(F,m,k);
-        FFLAS::frand(F, Rand, m,k, ffmat, k);
-        WriteRaw256(F, m*k, ffmat, "/tmp/ffmat.bin");
-        chrono.stop();
-        
-        std::clog << "[DATABASE] generated, " << chrono << std::endl;
-
             //--------------------
 			// Client INIT
         chrono.start();
 
             // Random UU and VV=M^T UU
-        FE_ptr uu = FFLAS::fflas_new(F,size,1);
-        FFLAS::frand(F, Rand, size, uu, 1);
+        FE_ptr uu = FFLAS::fflas_new(F,m,1);
+        FFLAS::frand(F, Rand, m, uu, 1);
 
             // VV=M^T UU
-        FE_ptr vv = FFLAS::fflas_new(F,size,1);
-        FFLAS::fgemv(F,FFLAS::FflasTrans,m, k, F.one, ffmat, k, uu, 1, F.zero,vv,1);
-
-            // Database is sent to Server and discarded
-        FFLAS::fflas_delete(ffmat);
+        FE_ptr vv = FFLAS::fflas_new(F,k,1);
+        {
+            FFLAS::fzero(F, k, vv, 1);
+            FE_ptr ffrow;
+            AllocateRaw256(F, k, ffrow);
+            RowAllocatedRaw256left(F, m, k, ffrow, uu, vv, "/tmp/ffmat.bin");
+            FFLAS::fflas_delete(ffrow);
+        }
+        
 
             // Ciphering VV in case of public audits
         if (PublicAudit) {
-            std::vector<point_t> ww(size);
+            std::vector<point_t> ww(k);
             int errors(0);
             scalar_t stmp;
-            for(size_t i=0; i<size; ++i) {
+            for(size_t i=0; i<k; ++i) {
                 Integer2scalar(stmp, vv[i]);
                 errors += crypto_scalarmult_ristretto255_base(
                     ww[i]._data,stmp._data);
@@ -74,12 +69,12 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
             assert(errors == 0);
 
             WritePoints(ww, "/tmp/porww.bin");
-        }
+        }   // ww is deleted by the end of this block
 
             // Write all to files for auditors
-        WriteRaw256(F, size, uu, "/tmp/poruu.bin");
+        WriteRaw256(F, m, uu, "/tmp/poruu.bin");
         FFLAS::fflas_delete(uu);
-        WriteRaw256(F, size, vv, "/tmp/porvv.bin");
+        WriteRaw256(F, k, vv, "/tmp/porvv.bin");
         FFLAS::fflas_delete(vv);
 
         chrono.stop();
@@ -91,8 +86,8 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         //   AUDIT.1: Client challenge
         //            Client generates XX and sends it to the Server
     chrono.start();
-    FE_ptr xx = FFLAS::fflas_new(F,1,size);
-    FFLAS::frand(F, Rand, size, xx, 1);
+    FE_ptr xx = FFLAS::fflas_new(F,k);
+    FFLAS::frand(F, Rand, k, xx, 1);
     chrono.stop();
     timeaudit += chrono.usertime();
 
@@ -101,7 +96,7 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         //            Server responds with YY
     chrono.start(); 
     {
-        FE_ptr yy = FFLAS::fflas_new(F,1,size);
+        FE_ptr yy = FFLAS::fflas_new(F,m);
         FE_ptr ffrow;
 
             // Server is computing the matrix-vector product row by row
@@ -109,7 +104,7 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         RowAllocatedRaw256DotProduct(F, m, k, ffrow, xx, yy, "/tmp/ffmat.bin");
 
             // Write yy to a file for the Client
-        WriteRaw256(F, size, yy, "/tmp/poryy.bin");
+        WriteRaw256(F, m, yy, "/tmp/poryy.bin");
         FFLAS::fflas_delete(yy,ffrow);
     }
     chrono.stop(); timeserver+=chrono.usertime();
@@ -121,19 +116,18 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
     bool success(false);
 
         // 3.1: Loading the client secrets
-    FE_ptr uu; ReadRaw256(F, size, uu, "/tmp/poruu.bin");
-    FE_ptr vv; ReadRaw256(F, size, vv, "/tmp/porvv.bin");
+    FE_ptr uu; ReadRaw256(F, m, uu, "/tmp/poruu.bin");
+    FE_ptr vv; ReadRaw256(F, k, vv, "/tmp/porvv.bin");
         // 3.2: Receiving the server result
-    FE_ptr yy; ReadRaw256(F, size, yy, "/tmp/poryy.bin");
+    FE_ptr yy; ReadRaw256(F, m, yy, "/tmp/poryy.bin");
 
         // 3.3: Computing u^T . y
     FE_ptr lhs = FFLAS::fflas_new(F,1,1), rhs = FFLAS::fflas_new(F,1,1);
-    FFLAS::ParSeqHelper::Sequential seqH;
-    FFLAS::fgemv(F,FFLAS::FflasNoTrans,1,size,F.one,uu,size,yy,1,F.zero,lhs,1,seqH);
+    FFLAS::fgemv(F,FFLAS::FflasNoTrans,1,m,F.one,uu,m,yy,1,F.zero,lhs,1);
 
         // 3.4a: public verification
     if (PublicAudit) {
-        std::vector<point_t> ww(size);
+        std::vector<point_t> ww(k);
         ReadPoints(ww, "/tmp/porww.bin");
 
         int errors(0);
@@ -143,7 +137,7 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
             // Computing W^x
         errors += crypto_scalarmult_ristretto255(
             result._data, Integer2scalar(sxx, xx[0])._data, ww[0]._data);
-        for(size_t i=1; i<size; ++i) {
+        for(size_t i=1; i<k; ++i) {
             errors += crypto_scalarmult_ristretto255(
                 mtmp._data, Integer2scalar(sxx, xx[i])._data, ww[i]._data);
             errors += crypto_core_ristretto255_add(
@@ -169,7 +163,7 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         // 3.4b: private verification
     } else {
             // Computing v^T x
-        FFLAS::fgemv(F,FFLAS::FflasNoTrans,1,size,F.one,vv,size,xx,1,F.zero,rhs,1,seqH);
+        FFLAS::fgemv(F,FFLAS::FflasNoTrans,1,k,F.one,vv,k,xx,1,F.zero,rhs,1);
             // Checking whether u^T y == v^T x
         success = F.areEqual(lhs[0],rhs[0]);
     }
@@ -191,7 +185,6 @@ template<typename Ints, typename Comps=Ints>
 int tmain(){
         // argv[1]: size of the vector dotproduct to benchmark
     const size_t bits(252);
-    const size_t size = k;
 
     srand( (int)seed);
     srand48(seed);
@@ -199,7 +192,7 @@ int tmain(){
 
         //-------------------------
         // Ristretto255 prime order
-   Givaro::Integer p("27742317777372353535851937790883648493");
+    Givaro::Integer p("27742317777372353535851937790883648493");
     p += Givaro::Integer(1)<<=252;
 
     std::vector<double> timeinit(iters), timeaudit(iters), timeserver(iters);
@@ -208,14 +201,25 @@ int tmain(){
     Field F(p);
     typename Field::RandIter Rand(F,seed);
 
+
+        //--------------------
+        // Random Database Generation
+    FFLAS::Timer chrono; chrono.clear(); chrono.start();
+    typename Field::Element_ptr ffmat = FFLAS::fflas_new(F,m,k);
+    FFLAS::frand(F, Rand, m, k, ffmat, k);
+    WriteRaw256(F, m*k, ffmat, "/tmp/ffmat.bin");
+        // Database is sent to Server and discarded
+    FFLAS::fflas_delete(ffmat);        chrono.stop();
+    std::clog << "[DATABASE] generated, " << chrono << std::endl;
+
     bool success=true;
 
         //-------------------------
         // private Protocol
-    success &= Protocol<Field,false>(timeinit[0], timeaudit[0], timeserver[0], F, Rand, size);
+    success &= Protocol<Field,false>(timeinit[0], timeaudit[0], timeserver[0], F, Rand, m, k, "/tmp/ffmat.bin");
 
     for(size_t i=0; i<iters; ++i) {
-        success &= Protocol<Field,false>(timeinit[i], timeaudit[i], timeserver[i], F, Rand, size);
+        success &= Protocol<Field,false>(timeinit[i], timeaudit[i], timeserver[i], F, Rand, m, k, "/tmp/ffmat.bin");
     }
 
     std::sort(timeinit.begin(),timeinit.end());
@@ -228,9 +232,9 @@ int tmain(){
 
         //-------------------------
         // public Protocol
-    success &= Protocol<Field,true>(timeinit[0], timeaudit[0], timeserver[0], F, Rand, size);
+    success &= Protocol<Field,true>(timeinit[0], timeaudit[0], timeserver[0], F, Rand, m, k, "/tmp/ffmat.bin");
     for(size_t i=0; i<iters; ++i) {
-        success &= Protocol<Field,true>(timeinit[i], timeaudit[i], timeserver[i], F, Rand, size);
+        success &= Protocol<Field,true>(timeinit[i], timeaudit[i], timeserver[i], F, Rand, m, k, "/tmp/ffmat.bin");
     }
     std::sort(timeinit.begin(),timeinit.end());
     std::sort(timeaudit.begin(),timeaudit.end());
