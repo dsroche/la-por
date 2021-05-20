@@ -216,6 +216,18 @@ void WriteRaw256(const Field& F, size_t k, typename Field::ConstElement_ptr A,
     fclose(dataf);
 }
 
+template<typename Field>
+void AppendRaw256(const Field& F, size_t k, typename Field::ConstElement_ptr A,
+                 const char * filename = DATAF_NAME) {
+    FILE* dataf = fopen(filename, "a");
+    assert (dataf);
+    for(size_t i=0; i<k; ++i) {
+        fwrite(Givaro::SpyInteger::get_mpz( A[i] )->_mp_d, 8, 4, dataf);
+//         std::clog << "writ: " << A[i] << std::endl;
+    }
+    fclose(dataf);
+}
+
 
 /****************************************************************
  * Exact linear algebra

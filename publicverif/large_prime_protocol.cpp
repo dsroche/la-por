@@ -205,9 +205,13 @@ int tmain(){
         //--------------------
         // Random Database Generation
     FFLAS::Timer chrono; chrono.clear(); chrono.start();
-    typename Field::Element_ptr ffmat = FFLAS::fflas_new(F,m,k);
-    FFLAS::frand(F, Rand, m, k, ffmat, k);
-    WriteRaw256(F, m*k, ffmat, "/tmp/ffmat.bin");
+    typename Field::Element_ptr ffmat = FFLAS::fflas_new(F,k);
+    FFLAS::frand(F, Rand, k, ffmat, 1);
+    WriteRaw256(F, k, ffmat, "/tmp/ffmat.bin");
+    for(size_t i=1; i<m; ++i) {
+        FFLAS::frand(F, Rand, k, ffmat, 1);
+        AppendRaw256(F, k, ffmat, "/tmp/ffmat.bin");
+    }
         // Database is sent to Server and discarded
     FFLAS::fflas_delete(ffmat);        chrono.stop();
     std::clog << "[DATABASE] generated, " << chrono << std::endl;
