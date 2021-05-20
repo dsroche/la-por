@@ -333,13 +333,9 @@ RowAllocatedRaw256DotProduct(const Field& F, size_t m, size_t k, typename Field:
     const size_t N(k<<5); // 32 bytes in per element
     FILE* dataf = fopen(filename, "r");
     unsigned char* data_buf = reinterpret_cast<unsigned char*>( calloc(N, 1) );
-    double timefdot =0;
-    double timefread =0;
-    Givaro::Timer chrono;
 
     for (size_t i=0; i<m; i++){
         
-        chrono.clear();chrono.start();
         fread(data_buf, 1, N, dataf);
         uint64_t const* data_in_64s = reinterpret_cast<uint64_t const*>(data_buf);
         for(size_t j=0; j<k; ++j) {
@@ -350,20 +346,12 @@ RowAllocatedRaw256DotProduct(const Field& F, size_t m, size_t k, typename Field:
                            data_in_64s[4*j+3]);
                 //         std::clog << "read: " << A[i] << std::endl;
         }
-        chrono.stop(); timefread+=chrono.usertime();
-
-        chrono.clear();chrono.start();
-//         FFLAS::fgemv(F,FFLAS::FflasNoTrans,1,k,F.one,A,k,B,1,F.zero,C+i,1);
         F.assign( C[i], FFLAS::fdot(F,k,A,1,B,1) );
-        chrono.stop(); timefdot+=chrono.usertime();
         
     }
     fclose(dataf);
 
     free(data_buf);
-
-    std::clog<<" fread = "<< 1000*timefread<<"ms"<<std::endl;
-    std::clog<<" fdots = "<< 1000*timefdot<<"ms"<<std::endl;
     return C;
 }
 
@@ -380,6 +368,8 @@ RowAllocatedRaw256left(const Field& F,
     FILE* dataf = fopen(filename, "r");
     unsigned char* data_buf = reinterpret_cast<unsigned char*>( calloc(N, 1) );
 
+    Givaro::ZRing<Givaro::Integer> ZZ;
+
     for (size_t i=0; i<m; i++){
         
         fread(data_buf, 1, N, dataf);
@@ -393,13 +383,13 @@ RowAllocatedRaw256left(const Field& F,
                 //         std::clog << "read: " << A[i] << std::endl;
         }
         
-        FFLAS::faxpy(F, k, B[i], A, 1, C, 1);
+        FFLAS::faxpy(ZZ, k, B[i], A, 1, C, 1);
         
     }
     fclose(dataf);
-
     free(data_buf);
 
+    FFLAS::freduce(F,k,C,1);
     return C;
 }
 
