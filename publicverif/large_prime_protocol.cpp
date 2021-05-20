@@ -6,6 +6,7 @@ static size_t iters = 3 ;
 static size_t k = 512 ;
 static size_t m = 512 ;
 static size_t seed= time(NULL);
+static bool randomDB(true);
 static std::string DATABASEF_NAME("/tmp/ffmat.bin");
 static Argument as[] = {
     { 'm', "-m M", "Set the row dimension of the matrix.",  TYPE_INT , &m },
@@ -13,6 +14,7 @@ static Argument as[] = {
     { 'i', "-i R", "Set number of repetitions.",            TYPE_INT , &iters },
     { 's', "-s S", "Sets seed.",							TYPE_INT , &seed },
     { 'f', "-f finame", "Set the database filename.",   	TYPE_STR , &DATABASEF_NAME },
+    { 'r', "-r Y/N", "Generate a random database.",   		TYPE_BOOL , &randomDB },
     END_OF_ARGUMENTS
 };
 
@@ -200,19 +202,21 @@ int tmain(){
     typename Field::RandIter Rand(F,seed);
 
 
-        //--------------------
-        // Random Database Generation
-    FFLAS::Timer chrono; chrono.clear(); chrono.start();
-    typename Field::Element_ptr ffmat = FFLAS::fflas_new(F,k);
-    FFLAS::frand(F, Rand, k, ffmat, 1);
-    WriteRaw256(F, k, ffmat, DATABASEF_NAME.c_str());
-    for(size_t i=1; i<m; ++i) {
+    if (randomDB) {
+            //--------------------
+            // Random Database Generation
+        FFLAS::Timer chrono; chrono.clear(); chrono.start();
+        typename Field::Element_ptr ffmat = FFLAS::fflas_new(F,k);
         FFLAS::frand(F, Rand, k, ffmat, 1);
-        AppendRaw256(F, k, ffmat, DATABASEF_NAME.c_str());
+        WriteRaw256(F, k, ffmat, DATABASEF_NAME.c_str());
+        for(size_t i=1; i<m; ++i) {
+            FFLAS::frand(F, Rand, k, ffmat, 1);
+            AppendRaw256(F, k, ffmat, DATABASEF_NAME.c_str());
+        }
+            // Database is sent to Server and discarded
+        FFLAS::fflas_delete(ffmat);        chrono.stop();
+        std::clog << "[DATABASE] generated, " << chrono << std::endl;
     }
-        // Database is sent to Server and discarded
-    FFLAS::fflas_delete(ffmat);        chrono.stop();
-    std::clog << "[DATABASE] generated, " << chrono << std::endl;
 
     bool success=true;
 
