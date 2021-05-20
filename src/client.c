@@ -7,6 +7,7 @@
 #include "integrity.h"
 #include <sys/random.h>
 #include <getopt.h>
+#include "flint2.h"
 
 #define MAX(a,b) ((a) < (b) ? (b) : (a))
 

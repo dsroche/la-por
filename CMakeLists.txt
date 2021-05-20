@@ -14,6 +14,7 @@ project(integrity VERSION 0.1
 # find required libraries (ssl and crypto combined)
 find_package(OpenSSL 1.1.1 REQUIRED)
 find_package(MPI REQUIRED)
+find_package(OpenMP 4.5 REQUIRED)
 
 # set variables
 set(CC "gcc")
@@ -32,13 +33,14 @@ include_directories(include merkle/include tinymt64/include
 # file(GLOB SOURCES "src/*.c")
 
 # declare executables
-set(EXECS client server client_init server_init dual_init random_file)
+set(EXECS client server dual_init random_file)
 foreach(EXEC IN LISTS EXECS)
 	add_executable(${EXEC} src/${EXEC}.c)
 	target_link_libraries(${EXEC} merkle)
 	target_link_libraries(${EXEC} tinymt64)
 	target_link_libraries(${EXEC} ${OPENSSL_LIBRARIES})
 	target_link_libraries(${EXEC} m)
+	target_link_libraries(${EXEC} OpenMP::OpenMP_C)
 endforeach()
 
 # declare executables that use MPI

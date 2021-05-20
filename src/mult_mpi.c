@@ -2,6 +2,7 @@
 // first arg: server config file
 
 #include "integrity.h"
+#include "flint2.h"
 #include <inttypes.h>
 #include <assert.h>
 
