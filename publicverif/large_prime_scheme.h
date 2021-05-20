@@ -20,8 +20,10 @@
 #include <bitset>
 #include <assert.h>
 
-// default matrix name
+// default file name
+#ifndef DATAF_NAME
 #define DATAF_NAME ("/tmp/porscheme.bin")
+#endif
 
 /****************************************************************
  * Elliptic curve

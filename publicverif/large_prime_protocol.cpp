@@ -1,7 +1,3 @@
-
-
-
-
 #include "large_prime_scheme.h"
 
 #include <fflas-ffpack/utils/args-parser.h>
@@ -10,11 +6,13 @@ static size_t iters = 3 ;
 static size_t k = 512 ;
 static size_t m = 512 ;
 static size_t seed= time(NULL);
+static std::string DATABASEF_NAME("/tmp/ffmat.bin");
 static Argument as[] = {
-    { 'm', "-m M", "Set the row dimension of the matrix.",                    TYPE_INT , &m },
-    { 'k', "-k K", "Set the col dimension of the matrix.",                    TYPE_INT , &k },
-    { 'i', "-i R", "Set number of repetitions.",                            TYPE_INT , &iters },
-    { 's', "-s S", "Sets seed.",				TYPE_INT , &seed },
+    { 'm', "-m M", "Set the row dimension of the matrix.",  TYPE_INT , &m },
+    { 'k', "-k K", "Set the col dimension of the matrix.",  TYPE_INT , &k },
+    { 'i', "-i R", "Set number of repetitions.",            TYPE_INT , &iters },
+    { 's', "-s S", "Sets seed.",							TYPE_INT , &seed },
+    { 'f', "-f finame", "Set the database filename.",   	TYPE_STR , &DATABASEF_NAME },
     END_OF_ARGUMENTS
 };
 
@@ -49,7 +47,7 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
             FFLAS::fzero(F, k, vv, 1);
             FE_ptr ffrow;
             AllocateRaw256(F, k, ffrow);
-            RowAllocatedRaw256left(F, m, k, ffrow, uu, vv, "/tmp/ffmat.bin");
+            RowAllocatedRaw256left(F, m, k, ffrow, uu, vv, DATABASEF_NAME.c_str());
             FFLAS::fflas_delete(ffrow);
         }
         
@@ -101,7 +99,7 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
 
             // Server is computing the matrix-vector product row by row
         AllocateRaw256(F, k, ffrow);
-        RowAllocatedRaw256DotProduct(F, m, k, ffrow, xx, yy, "/tmp/ffmat.bin");
+        RowAllocatedRaw256DotProduct(F, m, k, ffrow, xx, yy, DATABASEF_NAME.c_str());
 
             // Write yy to a file for the Client
         WriteRaw256(F, m, yy, "/tmp/poryy.bin");
@@ -207,10 +205,10 @@ int tmain(){
     FFLAS::Timer chrono; chrono.clear(); chrono.start();
     typename Field::Element_ptr ffmat = FFLAS::fflas_new(F,k);
     FFLAS::frand(F, Rand, k, ffmat, 1);
-    WriteRaw256(F, k, ffmat, "/tmp/ffmat.bin");
+    WriteRaw256(F, k, ffmat, DATABASEF_NAME.c_str());
     for(size_t i=1; i<m; ++i) {
         FFLAS::frand(F, Rand, k, ffmat, 1);
-        AppendRaw256(F, k, ffmat, "/tmp/ffmat.bin");
+        AppendRaw256(F, k, ffmat, DATABASEF_NAME.c_str());
     }
         // Database is sent to Server and discarded
     FFLAS::fflas_delete(ffmat);        chrono.stop();
@@ -220,10 +218,10 @@ int tmain(){
 
         //-------------------------
         // private Protocol
-    success &= Protocol<Field,false>(timeinit[0], timeaudit[0], timeserver[0], F, Rand, m, k, "/tmp/ffmat.bin");
+    success &= Protocol<Field,false>(timeinit[0], timeaudit[0], timeserver[0], F, Rand, m, k, DATABASEF_NAME.c_str());
 
     for(size_t i=0; i<iters; ++i) {
-        success &= Protocol<Field,false>(timeinit[i], timeaudit[i], timeserver[i], F, Rand, m, k, "/tmp/ffmat.bin");
+        success &= Protocol<Field,false>(timeinit[i], timeaudit[i], timeserver[i], F, Rand, m, k, DATABASEF_NAME.c_str());
     }
 
     std::sort(timeinit.begin(),timeinit.end());
@@ -236,9 +234,9 @@ int tmain(){
 
         //-------------------------
         // public Protocol
-    success &= Protocol<Field,true>(timeinit[0], timeaudit[0], timeserver[0], F, Rand, m, k, "/tmp/ffmat.bin");
+    success &= Protocol<Field,true>(timeinit[0], timeaudit[0], timeserver[0], F, Rand, m, k, DATABASEF_NAME.c_str());
     for(size_t i=0; i<iters; ++i) {
-        success &= Protocol<Field,true>(timeinit[i], timeaudit[i], timeserver[i], F, Rand, m, k, "/tmp/ffmat.bin");
+        success &= Protocol<Field,true>(timeinit[i], timeaudit[i], timeserver[i], F, Rand, m, k, DATABASEF_NAME.c_str());
     }
     std::sort(timeinit.begin(),timeinit.end());
     std::sort(timeaudit.begin(),timeaudit.end());
