@@ -13,8 +13,8 @@ static Argument as[] = {
     { 'k', "-k K", "Set the col dimension of the matrix.",  TYPE_INT , &k },
     { 'i', "-i R", "Set number of repetitions.",            TYPE_INT , &iters },
     { 's', "-s S", "Sets seed.",							TYPE_INT , &seed },
-    { 'f', "-f finame", "Set the database filename.",   	TYPE_STR , &DATABASEF_NAME },
-    { 'r', "-r Y/N", "Generate a random database.",   		TYPE_BOOL , &randomDB },
+    { 'f', "-f finame", "Set the database filename.",	TYPE_STR , &DATABASEF_NAME },
+    { 'r', "-r Y/N", "Generate a random database.",		TYPE_BOOL , &randomDB },
     END_OF_ARGUMENTS
 };
 
@@ -24,16 +24,16 @@ static Argument as[] = {
     // Running the Public/Private Protocol
 template<typename Field, bool PublicAudit=true>
 bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
-              const Field& F, typename Field::RandIter& Rand, 
-              const size_t m, const size_t k, 
+              const Field& F, typename Field::RandIter& Rand,
+              const size_t m, const size_t k,
               const char * filename = DATAF_NAME) {
 
     timeinit=0., timeaudit=0., timeserver=0.;
 
     using FE_ptr = typename Field::Element_ptr;
 
-    FFLAS::Timer chronoinit, chronoserver, chronoaudit, chronoauditr; 
-    chronoinit.clear(); chronoserver.clear(); 
+    FFLAS::Timer chronoinit, chronoserver, chronoaudit, chronoauditr;
+    chronoinit.clear(); chronoserver.clear();
     chronoaudit.clear(); chronoauditr.clear();
 
     {
@@ -51,11 +51,11 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
             FFLAS::fzero(F, k, vv, 1);
             FE_ptr ffrow;
             AllocateRaw256(F, k, ffrow);
-            RowAllocatedRaw256left(F, m, k, ffrow, uu, vv, 
+            RowAllocatedRaw256left(F, m, k, ffrow, uu, vv,
                                    DATABASEF_NAME.c_str());
             FFLAS::fflas_delete(ffrow);
         }
-        
+
 
             // Ciphering VV in case of public audits
         if (PublicAudit) {
@@ -67,7 +67,7 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
                 errors += crypto_scalarmult_ristretto255_base(
                     ww[i]._data,stmp._data);
             }
-                // std::clog << "[CIPHER] " 
+                // std::clog << "[CIPHER] "
                 //           << errors << " errors." << std::endl;
             assert(errors == 0);
 
@@ -97,7 +97,7 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         //--------------------
         //   AUDIT.2: Server response
         //            Server responds with YY
-    chronoserver.start(); 
+    chronoserver.start();
     {
         FE_ptr yy = FFLAS::fflas_new(F,m);
         FE_ptr ffrow;
@@ -133,34 +133,21 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         std::vector<point_t> ww(k);
         ReadPoints(ww, "/tmp/porww.bin");
 
-        int errors(0);
-        point_t result, mtmp;
-        scalar_t sxx;
-
             // Computing W^x
-        errors += crypto_scalarmult_ristretto255(
-            result._data, Integer2scalar(sxx, xx[0])._data, ww[0]._data);
-        for(size_t i=1; i<k; ++i) {
-            errors += crypto_scalarmult_ristretto255(
-                mtmp._data, Integer2scalar(sxx, xx[i])._data, ww[i]._data);
-            errors += crypto_core_ristretto255_add(
-                result._data, result._data, mtmp._data);
-        }
-            // std::clog << "[SCAMUL] " 
-            //           << errors << " errors." << std::endl;
-        assert(errors == 0);
-
+        point_t plhs, prhs;
+        crypto_dotproduct_ristretto255<Field>(prhs, ww, xx);
 
             // Computing g^{u y}
-        Integer2scalar(sxx, lhs);
-        errors += crypto_scalarmult_ristretto255_base(mtmp._data,sxx._data);
+        scalar_t slhs; Integer2scalar(slhs, lhs);
+        int error = crypto_scalarmult_ristretto255_base(plhs._data,slhs._data);
+        assert(error == 0);
 
             // Checking whether g^{u^T y} == (g^v)^x
-        success = areEqualPoints(result, mtmp);
+        success = areEqualPoints(plhs, prhs);
 
         if (! success) {
-            std::cerr << "W^x   : " << result << std::endl;
-            std::cerr << "g^{uy}: " << mtmp << std::endl;
+            std::cerr << "W^x   : " << prhs << std::endl;
+            std::cerr << "g^{uy}: " << plhs << std::endl;
         }
 
         // 3.4b: private verification
