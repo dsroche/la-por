@@ -26,6 +26,7 @@
 #define CHUNK_ALIGN (56)
 // MAX_ACCUM_P is the most products you can accum in 128 bits before overflow
 #define MAX_ACCUM_P (1 << 15)
+//#define MAX_ACCUM_P (1) // FIXME remove
 typedef unsigned __int128 uint128_t;
 
 static inline uint64_t rand_mod_p(tinymt64_t* state) {
