@@ -80,6 +80,7 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
             assert(errors == 0);
 
             WritePoints(ww, "/tmp/porww.bin");
+            CreateAndSaveMerkle("/tmp/porww.bin", "/tmp/pormerkleconf.bin", "/tmp/pormerkletree.bin", 256);
         }   // ww is deleted by the end of this block
 
             // Write all to files for auditors
@@ -145,6 +146,12 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
     if (PublicAudit) {
         std::vector<point_t> ww(k);
         ReadPoints(ww, "/tmp/porww.bin");
+        int mrkverif = MerkleVerif("/tmp/porww.bin", "/tmp/pormerkleconf.bin");
+
+        success = (mrkverif == 0);
+        if (! success) {
+            std::cerr << "Merkle root verification error: " << mrkverif << '.' << std::endl;
+        }
 
             // Computing W^x
         point_t plhs, prhs;
@@ -156,7 +163,7 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         assert(error == 0);
 
             // Checking whether g^{u^T y} == (g^v)^x
-        success = areEqualPoints(plhs, prhs);
+        success &= areEqualPoints(plhs, prhs);
 
         if (! success) {
             std::cerr << "W^x   : " << prhs << std::endl;
@@ -181,6 +188,10 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         std::clog << "Audit\tFAIL." << std::endl;
 
     return (!success);
+}
+
+extern "C" {
+    void update_signature(store_info_t *info, EVP_MD_CTX *ctx);
 }
 
 

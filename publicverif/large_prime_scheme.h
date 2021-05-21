@@ -435,3 +435,114 @@ point_t& crypto_dotproduct_ristretto255(point_t& result,
 
     return result;
 }
+
+
+/****************************************************************
+ * Merkle tree
+ ****************************************************************/
+#include <sys/types.h>
+#include <sys/stat.h>
+extern "C" {
+    #include "merkle.h"
+}
+
+#define DEFAULT_DIGEST ("sha512-224")
+
+
+/**
+ * Create and save a Merkle tree of a given data file with specified blocksize
+*/
+int CreateAndSaveMerkle(char const * datapath, char const * configpath, char const * treepath, uint32_t blocksize) {
+#ifdef _LAPOR_DETAILED_TIMINGS_
+    FFLAS::Timer chrono; chrono.clear(); chrono.start();
+#endif
+
+    FILE *fin, *fmerkle, *ftree;
+    struct stat s;
+    off_t fileSize;
+    // input file must exist
+	if ((fin = fopen(datapath, "r")) == NULL) {
+		printf("Input data file <%s> does not exist\n", datapath);
+		return 2;
+	}
+    fmerkle = fopen(configpath, "w");
+	ftree   = fopen(treepath, "w");
+    // get file size
+	stat(datapath, &s);
+	fileSize = s.st_size;
+    
+    // initiate merkle tree structure
+	store_info_t merkleinfo;
+	work_space_t wspace;
+    merkleinfo.hash_nid = OBJ_txt2nid(DEFAULT_DIGEST);
+	merkleinfo.block_size = blocksize;
+	merkleinfo.size = fileSize;
+
+    store_info_fillin(&merkleinfo);
+	init_work_space(&merkleinfo, &wspace);
+    // create merkle tree over data - stored in ftree
+	init_root(fin, ftree, &merkleinfo, &wspace);
+	rewind(fin);
+
+	// store details in merkle config with root
+	store_info_store(fmerkle, true, &merkleinfo);
+    fclose(fin);
+    fclose(fmerkle);
+    fclose(ftree);
+
+#ifdef _LAPOR_DETAILED_TIMINGS_
+    chrono.stop();
+    std::clog << "[MERKLE] Tree/root creation: " << chrono << std::endl;
+#endif
+    return 0;
+}
+
+/**
+ * Check Merkle tree root of given data, root should be in configpath
+*/
+int MerkleVerif(char const * datapath, char const * configpath) {
+#ifdef _LAPOR_DETAILED_TIMINGS_
+    FFLAS::Timer chrono; chrono.clear(); chrono.start();
+#endif
+
+    FILE *fin, *fmerkleconfig;
+    // input file must exist
+	if ((fin = fopen(datapath, "rw")) == NULL) {
+		printf("Input data file <%s> does not exist\n", datapath);
+		return 2;
+	}
+    if ((fmerkleconfig  = fopen(configpath, "r+")) == NULL) {
+		fprintf(stderr, "Merkle Config file <%s> does not exist\n", configpath);
+		return 3;
+	}
+    // load merkle context
+	store_info_t sinfo, cinfo;
+	work_space_t wspace, cwspace;
+	read_req_t rreq;
+	uint64_t bufsize = 1024;
+	char* buf = (char *) malloc(bufsize);
+	if (store_info_load(fmerkleconfig, true, &sinfo) <=0) {
+		fprintf(stderr, "Improper Merkle config\n");
+		return 4;
+	}
+    rewind(fmerkleconfig);
+    if (store_info_load(fmerkleconfig, true, &cinfo) <=0) {
+		fprintf(stderr, "Improper Merkle config\n");
+		return 4;
+	}
+	init_work_space(&sinfo, &wspace);
+	update_signature(&sinfo, wspace.ctx);
+    init_work_space(&cinfo, &cwspace);
+	update_signature(&cinfo, cwspace.ctx);
+    init_root(fin, NULL, &cinfo, &cwspace);
+    fclose(fin);
+    fclose(fmerkleconfig);
+    int checkroot = memcmp(cinfo.root, sinfo.root, sinfo.hash_size);
+
+#ifdef _LAPOR_DETAILED_TIMINGS_
+    chrono.stop();
+    std::clog << "[MERKLE] root verification: " << chrono << std::endl;
+#endif
+
+    return checkroot;
+}
