@@ -5,6 +5,7 @@
 #include <omp.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/mman.h>
 
 /*****Compile with -lm flag due to inclusion of math.h*****/
 /***Compile using Makefile due to Mersenne Twist library***/
@@ -72,9 +73,9 @@ int main(int argc, char* argv[]) {
 	// n: number of columns
 	// m: number of rows
 	// Both will be the same to begin
-        uint64_t num_chunks = 1 + (fileSize - 1) / BYTES_UNDER_P;
-        uint64_t n = ceil(sqrt((double)num_chunks) / CHUNK_ALIGN) * CHUNK_ALIGN;
-        uint64_t m = 1 + (num_chunks - 1) / n;
+	uint64_t num_chunks = 1 + (fileSize - 1) / BYTES_UNDER_P;
+	uint64_t n = ceil(sqrt((double)num_chunks) / CHUNK_ALIGN) * CHUNK_ALIGN;
+	uint64_t m = 1 + (num_chunks - 1) / n;
 	printf("Using m = %"PRIu64", n = %"PRIu64".\n", m, n);
 	fwrite(&n, sizeof(uint64_t), 1, fclient);
 	fwrite(&m, sizeof(uint64_t), 1, fclient);
@@ -123,10 +124,13 @@ int main(int argc, char* argv[]) {
 
 #pragma omp parallel reduction(+:partials1[:n])
 	{
+		printf("thread %d starting vector-matrix mul\n", omp_get_thread_num());
 		size_t accum_count = 0;
 		int fd = open(argv[1], O_RDONLY);
-		uint64_t *raw_row = malloc(bytes_per_row);
 		assert (fd >= 0);
+		void *fdmap = mmap(NULL, fileSize, PROT_READ, MAP_PRIVATE, fd, 0);
+		assert (fdmap != MAP_FAILED);
+		close(fd);
 
 #pragma omp for schedule(static) nowait
 		for (size_t i = 0; i < m; i++) {
@@ -138,13 +142,14 @@ int main(int argc, char* argv[]) {
 				accum_count = 1;
 			}
 
-			// read in the entire row
-			ssize_t num_read = pread(fd, raw_row, bytes_per_row, bytes_per_row * i);
-			assert (num_read > 0);
-			if (num_read < bytes_per_row) {
-				assert (i == m - 1);
-				// zero out the remainder of the row if necessary
-				memset(((void*)raw_row) + num_read, 0, bytes_per_row - num_read);
+			// get a pointer to the row
+			uint64_t *raw_row;
+			if (i < m-1) {
+				raw_row = fdmap + (bytes_per_row * i);
+			}
+			else {
+				raw_row = calloc(bytes_per_row, 1);
+				memcpy(raw_row, fdmap + (bytes_per_row * i), fileSize - (bytes_per_row * i));
 			}
 
 			// XXX: this part assumes BYTES_UNDER_P equals 7
@@ -164,13 +169,19 @@ int main(int argc, char* argv[]) {
 				partials1[full_ind + 7] += data_val * vector1[i];
 			}
 			// XXX (end assumption that BYTES_UNDER_P equals 7)
+
+			if (i == m-1) {
+				free(raw_row);
+			}
 		}
+
+		munmap(fdmap, fileSize);
 
 		// mod reduction before parallel accumulate
 		for (size_t k = 0; k < n; ++k) {
 			partials1[k] %= P57;
 		}
-		free(raw_row);
+		printf("thread %d finished vector-matrix mul\n", omp_get_thread_num());
 	}
 
 	free(vector1);
