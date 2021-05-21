@@ -227,9 +227,12 @@ int tmain(){
         // private Protocol
     success &= Protocol<Field,false>(timeinit[0], timeaudit[0], timeserver[0], F, Rand, m, k, DATABASEF_NAME.c_str());
 
-    for(size_t i=0; i<iters; ++i) {
-        success &= Protocol<Field,false>(timeinit[i], timeaudit[i], timeserver[i], F, Rand, m, k, DATABASEF_NAME.c_str());
-    }
+    if (iters > 1)
+        for(size_t i=0; i<iters; ++i) {
+            success &= Protocol<Field,false>(
+                timeinit[i], timeaudit[i], timeserver[i], 
+                F, Rand, m, k, DATABASEF_NAME.c_str());
+        }
 
     std::sort(timeinit.begin(),timeinit.end());
     std::sort(timeaudit.begin(),timeaudit.end());
@@ -242,9 +245,13 @@ int tmain(){
         //-------------------------
         // public Protocol
     success &= Protocol<Field,true>(timeinit[0], timeaudit[0], timeserver[0], F, Rand, m, k, DATABASEF_NAME.c_str());
-    for(size_t i=0; i<iters; ++i) {
-        success &= Protocol<Field,true>(timeinit[i], timeaudit[i], timeserver[i], F, Rand, m, k, DATABASEF_NAME.c_str());
-    }
+
+    if (iters > 1)
+        for(size_t i=0; i<iters; ++i) {
+            success &= Protocol<Field,true>(
+                timeinit[i], timeaudit[i], timeserver[i], 
+                F, Rand, m, k, DATABASEF_NAME.c_str());
+        }
     std::sort(timeinit.begin(),timeinit.end());
     std::sort(timeaudit.begin(),timeaudit.end());
     std::sort(timeserver.begin(),timeserver.end());
