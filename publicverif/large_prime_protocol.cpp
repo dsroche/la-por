@@ -140,7 +140,7 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
 
         // 3.3: Computing u^T . y
     typename Field::Element lhs, rhs; F.init(lhs); F.init(rhs);
-    F.assign(lhs, FFLAS::fdot(F, m, uu, 1, yy, 1) );
+    F.assign(lhs, fdot(F, m, uu, 1, yy, 1) );
 
         // 3.4a: public verification
     if (PublicAudit) {
@@ -173,7 +173,7 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         // 3.4b: private verification
     } else {
             // Computing v^T x
-        F.assign(rhs, FFLAS::fdot(F, k, vv, 1, xx, 1) );
+        F.assign(rhs, fdot(F, k, vv, 1, xx, 1) );
             // Checking whether u^T y == v^T x
         success = F.areEqual(lhs,rhs);
     }

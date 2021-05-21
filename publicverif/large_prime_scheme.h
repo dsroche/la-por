@@ -323,6 +323,21 @@ ReadAllocatedRaw256(const Field& F, size_t k, typename Field::Element_ptr& A,
     return A;
 }
 
+Givaro::Integer fdot(const Givaro::Modular<Givaro::Integer>& F, const size_t N,
+     const Givaro::Integer* x, const size_t incx,
+     const Givaro::Integer* y, const size_t incy)
+{
+    Givaro::Integer d;
+    F.assign(d, F.zero);
+    const Givaro::Integer *  xi = x;
+    const Givaro::Integer *  yi = y;
+    for ( ; xi < x+N*incx; xi+=incx, yi+=incy )
+        d +=  (*xi) * (*yi);
+    F.init(d);
+    return d;
+    }
+
+
 template<typename Field>
 typename Field::Element_ptr&
 RowAllocatedRaw256DotProduct(const Field& F, size_t m, size_t k, typename Field::Element_ptr& A,
@@ -346,7 +361,7 @@ RowAllocatedRaw256DotProduct(const Field& F, size_t m, size_t k, typename Field:
                            data_in_64s[4*j+3]);
                 //         std::clog << "read: " << A[i] << std::endl;
         }
-        F.assign( C[i], FFLAS::fdot(F,k,A,1,B,1) );
+        F.assign( C[i], fdot(F,k,A,1,B,1) );
 
     }
     fclose(dataf);
