@@ -208,17 +208,19 @@ int tmain(){
     if (randomDB) {
             //--------------------
             // Random Database Generation
+        std::clog << "[DATABASE] generation ";
         FFLAS::Timer chrono; chrono.clear(); chrono.start();
         typename Field::Element_ptr ffmat = FFLAS::fflas_new(F,k);
         FFLAS::frand(F, Rand, k, ffmat, 1);
         WriteRaw256(F, k, ffmat, DATABASEF_NAME.c_str());
         for(size_t i=1; i<m; ++i) {
+            if (! (i%1000)) std::clog << '.';
             FFLAS::frand(F, Rand, k, ffmat, 1);
             AppendRaw256(F, k, ffmat, DATABASEF_NAME.c_str());
         }
             // Database is sent to Server and discarded
         FFLAS::fflas_delete(ffmat);        chrono.stop();
-        std::clog << "[DATABASE] generated, " << chrono << std::endl;
+        std::clog << " generated, " << chrono << std::endl;
     }
 
     bool success=true;
