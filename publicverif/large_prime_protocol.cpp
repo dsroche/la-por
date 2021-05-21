@@ -13,8 +13,8 @@ static Argument as[] = {
     { 'k', "-k K", "Set the col dimension of the matrix.",  TYPE_INT , &k },
     { 'i', "-i R", "Set number of repetitions.",            TYPE_INT , &iters },
     { 's', "-s S", "Sets seed.",							TYPE_INT , &seed },
-    { 'f', "-f finame", "Set the database filename.",   	TYPE_STR , &DATABASEF_NAME },
-    { 'r', "-r Y/N", "Generate a random database.",   		TYPE_BOOL , &randomDB },
+    { 'f', "-f finame", "Set the database filename.",	TYPE_STR , &DATABASEF_NAME },
+    { 'r', "-r Y/N", "Generate a random database.",		TYPE_BOOL , &randomDB },
     END_OF_ARGUMENTS
 };
 
@@ -24,20 +24,22 @@ static Argument as[] = {
     // Running the Public/Private Protocol
 template<typename Field, bool PublicAudit=true>
 bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
-              const Field& F, typename Field::RandIter& Rand, 
-              const size_t m, const size_t k, 
+              const Field& F, typename Field::RandIter& Rand,
+              const size_t m, const size_t k,
               const char * filename = DATAF_NAME) {
 
     timeinit=0., timeaudit=0., timeserver=0.;
 
     using FE_ptr = typename Field::Element_ptr;
 
-    FFLAS::Timer chrono;
+    FFLAS::Timer chronoinit, chronoserver, chronoaudit, chronoauditr;
+    chronoinit.clear(); chronoserver.clear();
+    chronoaudit.clear(); chronoauditr.clear();
 
     {
             //--------------------
 			// Client INIT
-        chrono.start();
+        chronoinit.start();
 
             // Random UU and VV=M^T UU
         FE_ptr uu = FFLAS::fflas_new(F,m,1);
@@ -49,10 +51,11 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
             FFLAS::fzero(F, k, vv, 1);
             FE_ptr ffrow;
             AllocateRaw256(F, k, ffrow);
-            RowAllocatedRaw256left(F, m, k, ffrow, uu, vv, DATABASEF_NAME.c_str());
+            RowAllocatedRaw256left(F, m, k, ffrow, uu, vv,
+                                   DATABASEF_NAME.c_str());
             FFLAS::fflas_delete(ffrow);
         }
-        
+
 
             // Ciphering VV in case of public audits
         if (PublicAudit) {
@@ -64,7 +67,7 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
                 errors += crypto_scalarmult_ristretto255_base(
                     ww[i]._data,stmp._data);
             }
-                // std::clog << "[CIPHER] " 
+                // std::clog << "[CIPHER] "
                 //           << errors << " errors." << std::endl;
             assert(errors == 0);
 
@@ -77,24 +80,24 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         WriteRaw256(F, k, vv, "/tmp/porvv.bin");
         FFLAS::fflas_delete(vv);
 
-        chrono.stop();
-        timeinit += chrono.usertime();
+        chronoinit.stop();
+        timeinit += chronoinit.realtime();
     }
 
         //--------------------
         // Starting AUDIT
         //   AUDIT.1: Client challenge
         //            Client generates XX and sends it to the Server
-    chrono.start();
+    chronoaudit.start();
     FE_ptr xx = FFLAS::fflas_new(F,k);
     FFLAS::frand(F, Rand, k, xx, 1);
-    chrono.stop();
-    timeaudit += chrono.usertime();
+    chronoaudit.stop();
+    timeaudit += chronoaudit.realtime();
 
         //--------------------
         //   AUDIT.2: Server response
         //            Server responds with YY
-    chrono.start(); 
+    chronoserver.start();
     {
         FE_ptr yy = FFLAS::fflas_new(F,m);
         FE_ptr ffrow;
@@ -107,12 +110,12 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         WriteRaw256(F, m, yy, "/tmp/poryy.bin");
         FFLAS::fflas_delete(yy,ffrow);
     }
-    chrono.stop(); timeserver+=chrono.usertime();
+    chronoserver.stop(); timeserver+=chronoserver.usertime();
 
         //--------------------
         //   AUDIT.3: Client verification
         //            Client verifies the Server response
-    chrono.start();
+    chronoauditr.start();
     bool success(false);
 
         // 3.1: Loading the client secrets
@@ -130,34 +133,21 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         std::vector<point_t> ww(k);
         ReadPoints(ww, "/tmp/porww.bin");
 
-        int errors(0);
-        point_t result, mtmp;
-        scalar_t sxx;
-
             // Computing W^x
-        errors += crypto_scalarmult_ristretto255(
-            result._data, Integer2scalar(sxx, xx[0])._data, ww[0]._data);
-        for(size_t i=1; i<k; ++i) {
-            errors += crypto_scalarmult_ristretto255(
-                mtmp._data, Integer2scalar(sxx, xx[i])._data, ww[i]._data);
-            errors += crypto_core_ristretto255_add(
-                result._data, result._data, mtmp._data);
-        }
-            // std::clog << "[SCAMUL] " 
-            //           << errors << " errors." << std::endl;
-        assert(errors == 0);
-
+        point_t plhs, prhs;
+        crypto_dotproduct_ristretto255<Field>(prhs, ww, xx);
 
             // Computing g^{u y}
-        Integer2scalar(sxx, lhs);
-        errors += crypto_scalarmult_ristretto255_base(mtmp._data,sxx._data);
+        scalar_t slhs; Integer2scalar(slhs, lhs);
+        int error = crypto_scalarmult_ristretto255_base(plhs._data,slhs._data);
+        assert(error == 0);
 
             // Checking whether g^{u^T y} == (g^v)^x
-        success = areEqualPoints(result, mtmp);
+        success = areEqualPoints(plhs, prhs);
 
         if (! success) {
-            std::cerr << "W^x   : " << result << std::endl;
-            std::cerr << "g^{uy}: " << mtmp << std::endl;
+            std::cerr << "W^x   : " << prhs << std::endl;
+            std::cerr << "g^{uy}: " << plhs << std::endl;
         }
 
         // 3.4b: private verification
@@ -169,11 +159,11 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
     }
 
     FFLAS::fflas_delete(uu,vv,xx,yy);
-    chrono.stop();
-    timeaudit += chrono.usertime();
+    chronoauditr.stop();
+    timeaudit += chronoauditr.usertime();
 
     if (success)
-        std::clog << "Audit\tPASS. \t" << timeinit << ',' << timeserver << ',' << timeaudit << std::endl;
+        std::clog << "Audit\tPASS. \t" << chronoinit << ',' << chronoserver << ',' << (chronoaudit += chronoauditr) << std::endl;
     else
         std::clog << "Audit\tFAIL." << std::endl;
 

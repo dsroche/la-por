@@ -1,12 +1,12 @@
 /****************************************************************
  * Public/Private Proof Retreivability with low server storage
  * Requires:
- * \url{https://gmplib.org}, 
+ * \url{https://gmplib.org},
  * \url{https://github.com/linbox-team/givaro},
  * \url{http://www.openblas.net},
  * \url{https://linbox-team.github.io/fflas-ffpack},
  * \url{https://download.libsodium.org}.
- * 
+ *
  ****************************************************************/
 
 #include <fflas-ffpack/fflas-ffpack-config.h>
@@ -24,6 +24,8 @@
 #ifndef DATAF_NAME
 #define DATAF_NAME ("/tmp/porscheme.bin")
 #endif
+
+#define INTEGER_NO_RNS 1
 
 /****************************************************************
  * Elliptic curve
@@ -333,7 +335,7 @@ RowAllocatedRaw256DotProduct(const Field& F, size_t m, size_t k, typename Field:
     unsigned char* data_buf = reinterpret_cast<unsigned char*>( calloc(N, 1) );
 
     for (size_t i=0; i<m; i++){
-        
+
         fread(data_buf, 1, N, dataf);
         uint64_t const* data_in_64s = reinterpret_cast<uint64_t const*>(data_buf);
         for(size_t j=0; j<k; ++j) {
@@ -344,21 +346,19 @@ RowAllocatedRaw256DotProduct(const Field& F, size_t m, size_t k, typename Field:
                            data_in_64s[4*j+3]);
                 //         std::clog << "read: " << A[i] << std::endl;
         }
-//         FFLAS::fgemv(F,FFLAS::FflasNoTrans,1,k,F.one,A,k,B,1,F.zero,C+i,1);
         F.assign( C[i], FFLAS::fdot(F,k,A,1,B,1) );
-        
+
     }
     fclose(dataf);
 
     free(data_buf);
-
     return C;
 }
 
 
 template<typename Field>
 typename Field::Element_ptr&
-RowAllocatedRaw256left(const Field& F, 
+RowAllocatedRaw256left(const Field& F,
                        size_t m, size_t k, typename Field::Element_ptr& A,
                        typename Field::ConstElement_ptr B,
                        typename Field::Element_ptr& C,
@@ -368,8 +368,10 @@ RowAllocatedRaw256left(const Field& F,
     FILE* dataf = fopen(filename, "r");
     unsigned char* data_buf = reinterpret_cast<unsigned char*>( calloc(N, 1) );
 
+    Givaro::ZRing<Givaro::Integer> ZZ;
+
     for (size_t i=0; i<m; i++){
-        
+
         fread(data_buf, 1, N, dataf);
         uint64_t const* data_in_64s = reinterpret_cast<uint64_t const*>(data_buf);
         for(size_t j=0; j<k; ++j) {
@@ -380,14 +382,14 @@ RowAllocatedRaw256left(const Field& F,
                            data_in_64s[4*j+3]);
                 //         std::clog << "read: " << A[i] << std::endl;
         }
-        
-        FFLAS::faxpy(F, k, B[i], A, 1, C, 1);
-        
+
+        FFLAS::faxpy(ZZ, k, B[i], A, 1, C, 1);
+
     }
     fclose(dataf);
-
     free(data_buf);
 
+    FFLAS::freduce(F,k,C,1);
     return C;
 }
 
@@ -396,7 +398,6 @@ RowAllocatedRaw256left(const Field& F,
  * Median deviation
  ****************************************************************/
 
-
 template<typename Vect> double mediandeviation(const Vect& v) {
     assert(v.size()>0);
     typename Vect::value_type median(v[v.size()/2]);
@@ -404,6 +405,33 @@ template<typename Vect> double mediandeviation(const Vect& v) {
     double t2( v.back()-median );
     return 100.*std::max(t1,t2)/median;
 }
-    
 
 
+
+/****************************************************************
+ * dotproduct in the exponents
+ ****************************************************************/
+
+template<typename Field>
+point_t& crypto_dotproduct_ristretto255(point_t& result,
+                                        const std::vector<point_t>& ww,
+                                        typename Field::ConstElement_ptr xx) {
+    int errors(0);
+    point_t mtmp;
+    scalar_t sxx;
+
+        // Computing W^x
+    errors += crypto_scalarmult_ristretto255(
+        result._data, Integer2scalar(sxx, xx[0])._data, ww[0]._data);
+    for(size_t i=1; i<ww.size(); ++i) {
+        errors += crypto_scalarmult_ristretto255(
+            mtmp._data, Integer2scalar(sxx, xx[i])._data, ww[i]._data);
+        errors += crypto_core_ristretto255_add(
+            result._data, result._data, mtmp._data);
+    }
+        // std::clog << "[SCAMUL] "
+        //           << errors << " errors." << std::endl;
+    assert(errors == 0);
+
+    return result;
+}
