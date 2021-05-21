@@ -13,12 +13,11 @@ project(integrity VERSION 0.1
 
 # find required libraries (ssl and crypto combined)
 find_package(OpenSSL 1.1.1 REQUIRED)
-find_package(MPI REQUIRED)
 find_package(OpenMP 4.5 REQUIRED)
 
 # set variables
 set(CC "gcc")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Ofast -march=native -std=gnu99 -Wno-missing-prototypes -g")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Ofast -march=native -std=gnu99 -Wno-missing-prototypes -DNDEBUG -Wno-unused -g")
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin)
 
 # link merkle subdir
@@ -26,8 +25,7 @@ add_subdirectory(merkle)
 add_subdirectory(tinymt64)
 
 # allow CMake to see the header files
-include_directories(include merkle/include tinymt64/include
-	${OPENSSL_INCLUDE_DIRS} ${MPI_C_INCLUDE_DIRS})
+include_directories(include merkle/include tinymt64/include ${OPENSSL_INCLUDE_DIRS})
 
 # variable SOURCES now holds all of the executables desired
 # file(GLOB SOURCES "src/*.c")
@@ -42,12 +40,3 @@ foreach(EXEC IN LISTS EXECS)
 	target_link_libraries(${EXEC} m)
 	target_link_libraries(${EXEC} OpenMP::OpenMP_C)
 endforeach()
-
-# declare executables that use MPI
-#set(MPI_C_COMPILER "mpicc")
-set(MPI_EXECS mult_mpi)
-foreach(MPI_EXEC IN LISTS MPI_EXECS)
-	add_executable(${MPI_EXEC} src/${MPI_EXEC}.c)
-	target_link_libraries(${MPI_EXEC} ${MPI_C_LIBRARIES})
-endforeach()
-
