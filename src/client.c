@@ -7,7 +7,6 @@
 #include "integrity.h"
 #include <sys/random.h>
 #include <getopt.h>
-#include "flint2.h"
 
 #define MAX(a,b) ((a) < (b) ? (b) : (a))
 
@@ -24,8 +23,8 @@ void usage(const char* arg0) {
 void my_fread(void* ptr, size_t size, size_t nmemb, FILE* stream);
 void my_fwrite(void* ptr, size_t size, size_t nmemb, FILE* stream);
 uint64_t* makeChallengeVector(uint64_t size); 
-int runAudit(FILE* fconfig, uint64_t* challenge1, uint64_t* challenge2,
-				uint64_t* response1, uint64_t* response2, uint64_t n, uint64_t m);
+int runAudit(FILE* fconfig, uint64_t* challenge1,
+				uint64_t* response1, uint64_t n, uint64_t m);
 
 bool client_prep_read(read_req_t* rreq, char** buf, uint64_t* bufsize,
     const store_info_t* info, work_space_t* space);
@@ -173,14 +172,11 @@ done_opts:
 			// create and send challenge vectors (of size n)
 			start_time(&timer);				/* START COMP TIMER */
 			uint64_t* challenge1;
-			uint64_t* challenge2;
 			uint64_t challengeBytes = n * sizeof(uint64_t);
 			challenge1 = makeChallengeVector(n);
-			challenge2 = makeChallengeVector(n);
 			client_comp_time = stop_time(&timer);		/* PAUSE COMP TIMER */
 			start_time(&timer);				/* START COMM TIMER */
 			my_fwrite(challenge1, 1, challengeBytes, sock);
-			my_fwrite(challenge2, 1, challengeBytes, sock);
 			fflush(sock);
 
 			// wait for ACK from server
@@ -188,13 +184,15 @@ done_opts:
 			my_fread(&ack, 1, 1, sock);
 			if (ack == '1') comm_time = stop_time(&timer);	/* STOP COMM TIMER */
 			else printf("Did not receive ACK from server after sending challenge.\n");
+			printf("challenge[0] = %"PRIu64"\n", challenge1[0]);
+			printf("challenge[n-1] = %"PRIu64"\n", challenge1[n-1]);
 
 			// read response vectors from server (of size m)
 			uint64_t* response1 = calloc(m, sizeof(uint64_t));
-			uint64_t* response2 = calloc(m, sizeof(uint64_t));
 			uint64_t responseBytes = m * sizeof(uint64_t);
 			my_fread(response1, 1, responseBytes, sock);
-			my_fread(response2, 1, responseBytes, sock);
+			printf("response[0] = %"PRIu64"\n", response1[0]);
+			printf("response[m-1] = %"PRIu64"\n", response1[m-1]);
 
 			// send previous comm_time as ack to server
 			my_fwrite(&comm_time, sizeof(comm_time), 1, sock);
@@ -204,8 +202,8 @@ done_opts:
 			// run audit and report to client
 			// use m for size
 			start_time(&timer);				/* RESUME COMP TIMER */
-			int audit = runAudit(fconfig, challenge1, challenge2,
-							response1, response2, n, m);
+			int audit = runAudit(fconfig, challenge1,
+							response1, n, m);
 			client_comp_time += stop_time(&timer);		/* STOP TIMER */
 			printf("Audit has ");
 			printf(audit ? "PASSED!\n" : "FAILED.\n");
@@ -215,9 +213,7 @@ done_opts:
 
 			// clean up
 			free(challenge1);
-			free(challenge2);
 			free(response1);
-			free(response2);
 			break;
 
 		case '2':
@@ -296,9 +292,7 @@ done_opts:
 			uint64_t oldValue;
 			uint64_t newVectorValue;
 			uint64_t random1;
-			uint64_t random2;
 			uint64_t secret1;
-			uint64_t secret2;
 			long index;
 			unsigned char* oldByte = &newValue; /*initialized only to get rid of warning*/
 			for (uint64_t i = initial; i <= final; i++) {
@@ -342,34 +336,26 @@ done_opts:
 					// get corresponding values from random vectors
 					fseek(fconfig, affectedRandom*sizeof(uint64_t), SEEK_CUR);
 					my_fread(&random1, sizeof(uint64_t), 1, fconfig);
-					fseek(fconfig, (m-1)*sizeof(uint64_t), SEEK_CUR);
-					my_fread(&random2, sizeof(uint64_t), 1, fconfig);
 
 					// get corresponding values from secret vectors
 					fseek(fconfig, (m - 1 - affectedRandom + affectedSecret)*sizeof(uint64_t), SEEK_CUR);
 					index = ftell(fconfig); /*tag where to write later*/
 					my_fread(&secret1, sizeof(uint64_t), 1, fconfig);
-					fseek(fconfig, (n-1)*sizeof(uint64_t), SEEK_CUR);
-					my_fread(&secret2, sizeof(uint64_t), 1, fconfig);
 					
 					// compute differences with updated value
 					if (newVectorValue == oldValue) {
 						printf("No update needed.\n");
 						break;
 					}else if (newVectorValue > oldValue) {
-						secret1 += n_mulmod2_preinv((newVectorValue - oldValue), random1, PRIME_1, PREINV_PRIME_1);
-						secret2 += n_mulmod2_preinv((newVectorValue - oldValue), random2, PRIME_2, PREINV_PRIME_2);
+						secret1 = (uint64_t)((secret1 + ((uint128_t)(newVectorValue - oldValue)) * random1) % P57);
 					}else {
-						secret1 -= n_mulmod2_preinv((oldValue - newVectorValue), random1, PRIME_1, PREINV_PRIME_1);
-						secret2 -= n_mulmod2_preinv((oldValue - newVectorValue), random2, PRIME_2, PREINV_PRIME_2);
+						secret1 = (uint64_t)((secret1 + ((uint128_t)(newVectorValue + P57 - oldValue)) * random1) % P57);
 					}
 
 
 					// update the secret vectors at the affected index
 					fseek(fconfig, index, SEEK_SET);
 					my_fwrite(&secret1, sizeof(uint64_t), 1, fconfig);
-					fseek(fconfig, (n-1)*sizeof(uint64_t), SEEK_CUR);
-					my_fwrite(&secret2, sizeof(uint64_t), 1, fconfig);
 					fflush(fconfig);
 
 					// rewind the config file to after n,m
@@ -430,63 +416,60 @@ uint64_t* makeChallengeVector(uint64_t size) {
 		exit(7);
 	}
 #endif
-	tinymt64_t state;
+	tinymt64_t state = {0};
 	tinymt64_init(&state, seed);
 
 	// construct the randomized vector
 	uint64_t* vector = calloc(size, sizeof(uint64_t));
 	for (int i = 0; i < size; i++) {
-		vector[i] = tinymt64_generate_uint64(&state);
+		vector[i] = rand_mod_p(&state);
 	}
-	
+
 	return vector;
 }
 
 
-int runAudit(FILE* fconfig, uint64_t* challenge1, uint64_t* challenge2,
-				uint64_t* response1, uint64_t* response2, uint64_t n, uint64_t m) {
-	uint64_t rxr1 = 0;
-	uint64_t rxr2 = 0;
-	uint64_t sxc1 = 0;
-	uint64_t sxc2 = 0;
+int runAudit(FILE* fconfig, uint64_t* challenge1,
+				uint64_t* response1, uint64_t n, uint64_t m) {
+	uint128_t rxr1 = 0;
+	uint128_t sxc1 = 0;
 
 	// compute dot products:
 	// random dot response & secret dot challenge.
 	// config file read through once
 	// doing modulo calc for each mul,
 	// doing one modulo after all addition at end.
-	uint64_t temp;
+	size_t accum_count = 0;
+
+	uint64_t *temp = malloc(MAX(m,n) * sizeof *temp);
+	my_fread(temp, sizeof *temp, m, fconfig);
 
 	for (int i = 0; i < m; i++) { /*random1 dot response1 (m)*/
-		if (fread(&temp, sizeof(uint64_t), 1, fconfig) != 1)
-		temp = 0;
-		rxr1 += n_mulmod2_preinv(temp, response1[i], PRIME_1, PREINV_PRIME_1);
+		if ((accum_count += 2) > MAX_ACCUM_P) {
+			rxr1 %= P57;
+			accum_count = 2;
+		}
+		rxr1 += ((uint128_t)temp[i]) * response1[i];
 	}
-	for (int i = 0; i < m; i++) { /*random2 dot response2 (m)*/
-		if (fread(&temp, sizeof(uint64_t), 1, fconfig) != 1)
-		temp = 0;
-		rxr2 += n_mulmod2_preinv(temp, response2[i], PRIME_2, PREINV_PRIME_2);
-	}
+	rxr1 %= P57;
+	accum_count = 0;
+	my_fread(temp, sizeof *temp, n, fconfig);
 	for (int i = 0; i < n; i++) { /*secret1 dot challenge1 (n)*/
-		if (fread(&temp, sizeof(uint64_t), 1, fconfig) != 1)
-		temp = 0;
-		sxc1 += n_mulmod2_preinv(temp, challenge1[i], PRIME_1, PREINV_PRIME_1);
+		if ((accum_count += 2) > MAX_ACCUM_P) {
+			sxc1 %= P57;
+			accum_count = 2;
+		}
+		sxc1 += ((uint128_t)temp[i]) * challenge1[i];
 	}
-	for (int i = 0; i < n; i++) { /*secret2 dot challenge2 (n)*/
-		if (fread(&temp, sizeof(uint64_t), 1, fconfig) != 1)
-		temp = 0;
-		sxc2 += n_mulmod2_preinv(temp, challenge2[i], PRIME_2, PREINV_PRIME_2);
-	}
-	rxr1 = rxr1 % PRIME_1;
-	rxr2 = rxr2 % PRIME_2;
-	sxc1 = sxc1 % PRIME_1;
-	sxc2 = sxc2 % PRIME_2;
+	sxc1 %= P57;
+	free(temp);
 
 	// check for equal and return result
 	// 1 for pass
 	// 0 for fail (default)
-	printf("rxr1 = "_CHUNK_SPECIFIER"\nrxr2 = "_CHUNK_SPECIFIER"\nsxc1 = "_CHUNK_SPECIFIER"\nsxc2 = "_CHUNK_SPECIFIER"\n", rxr1, rxr2, sxc1, sxc2);
-	return ((rxr1 == sxc1) && (rxr2 == sxc2));
+	printf("rxr1 = %"PRIu64"\n", (uint64_t)rxr1);
+	printf("sxc1 = %"PRIu64"\n", (uint64_t)sxc1);
+	return (rxr1 == sxc1);
 }
 
 

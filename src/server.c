@@ -6,6 +6,11 @@
 #include "integrity.h"
 #include <signal.h>
 #include <getopt.h>
+#include <inttypes.h>
+#include <omp.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/mman.h>
 
 int server;
 int clientfd;
@@ -18,8 +23,6 @@ work_space_t wspace;
 void usage(const char* arg0) {
 	fprintf(stderr, "usage: %s [OPTIONS] [<config_file>] [<merkle_config_file>]\n"
 			"	-p --port			port over which to connect with cloud server; defaults to 2020\n"
-			"	-m --MPIhosts		path to hostfile for MPI, giving IPs and allocations of machines\n"
-                        "	-n --numslots           number of parallel MPI slots to use (-np option in MPI)\n"
 			"	-v --verbose		verbose mode\n"
 			"	-h --help			show this help menu\n"
 			, arg0);
@@ -43,8 +46,6 @@ int main(int argc, char* argv[]) {
 
 	short port = 2020; /*defaults to 2020*/
 	int verbose = 0; /*defaults to off*/
-	char* hostfile = NULL;
-	char* np = NULL;
 
 	// register handler and make it run at exit as well
 	signal(SIGINT, handler);
@@ -54,28 +55,18 @@ int main(int argc, char* argv[]) {
 	// handle command line arguments
 	struct option longopts[] = {
 		{"port", required_argument, NULL, 'p'},
-		{"MPIhosts", required_argument, NULL, 'm'},
-                {"numslots", required_argument, NULL, 'n'},
 		{"verbose", no_argument, NULL, 'v'},
 		{"help", no_argument, NULL, 'h'},
 		{NULL, 0, NULL, 0}
 	};
 
 	while (true) {
-		switch (getopt_long(argc, argv, "p:m:n:vh", longopts, NULL)) {
+		switch (getopt_long(argc, argv, "p:vh", longopts, NULL)) {
 			case -1:
 				goto done_opts;
 
 			case 'p':
 				port = atoi(optarg);
-				break;
-
-			case 'm':
-				hostfile = optarg;
-				break;
-
-			case 'n':
-				np = optarg;
 				break;
 
 			case 'v':
@@ -166,9 +157,7 @@ done_opts:
 
 		if (c_pid == 0) {
 
-			// convert socket to FILE* can only happen if we are NOT
-			// doing an audit (because of exec)
-			client = NULL;
+			client = fdopen(clientfd, "r+");
 			fprintf(stderr, "\nTest Child\n");
 
 			// read mode type from user
@@ -184,26 +173,110 @@ done_opts:
 			switch (mode) {
 				case 'A':
 					/*audit stuff*/
-					fprintf(stderr, "Entering Audit Mode...\n");
+					{
+						fprintf(stderr, "Entering Audit Mode...\n");
 
-					// exec audit protocol and close
-					char* args[] = {"mpirun", "-v", "-host", "localhost", "--map-by", "ppr:1:core", "bin/mult_mpi", argv[optind], NULL};
-					if (hostfile) {
-						args[2] = "-hostfile";
-						args[3] = hostfile;
+						uint64_t *challenge1 = malloc(n * sizeof *challenge1);
+						uint64_t *dot_prods1 = malloc(m * sizeof *dot_prods1);
+
+						my_fread(challenge1, sizeof *challenge1, n, client);
+						char ack = '1';
+						my_fwrite(&ack, 1, 1, client);
+						fflush(client);
+
+						printf("Read %"PRIu64" bytes from client.\n", n * sizeof *challenge1);
+
+						struct timespec timer, cpu_timer;
+						start_time(&timer);
+						start_cpu_time(&cpu_timer);
+
+						struct stat s;
+						stat(path, &s);
+						uint64_t filenm = s.st_size;
+						uint64_t bytes_per_row = BYTES_UNDER_P * n;
+						assert (n % 8 == 0);
+						static const uint64_t CHUNK_MASK = (UINT64_C(1) << (8 * BYTES_UNDER_P)) - 1;
+
+#pragma omp parallel
+						{
+							printf("thread %d starting matrix-vector mul\n", omp_get_thread_num());
+							int fd = open(path, O_RDONLY);
+							assert (fd >= 0);
+							void *fdmap = mmap(NULL, filenm, PROT_READ, MAP_PRIVATE, fd, 0);
+							assert (fdmap != MAP_FAILED);
+							close(fd);
+
+#pragma omp for schedule(static) nowait
+							for (size_t i = 0; i < m; ++i) {
+								// get a pointer to the row
+								uint64_t *raw_row;
+								if (i < m-1) {
+									raw_row = fdmap + (bytes_per_row * i);
+								}
+								else {
+									raw_row = calloc(bytes_per_row, 1);
+									memcpy(raw_row, fdmap + (bytes_per_row * i), filenm - (bytes_per_row * i));
+								}
+
+								// XXX: this part assumes BYTES_UNDER_P equals 7
+								// dot product accross the row, 56 bytes (8 chunks) at a time
+								uint128_t row_val = 0;
+								size_t accum_count = 0;
+								for (size_t raw_ind = 0, full_ind = 0; full_ind < n; raw_ind += 7, full_ind += 8) {
+									// avoid overflow using mod when needed
+									if ((accum_count += 8) > MAX_ACCUM_P) {
+										row_val %= P57;
+										accum_count = 8;
+									}
+
+									uint128_t data_val = raw_row[raw_ind] & CHUNK_MASK;
+									row_val += data_val * challenge1[full_ind];
+
+									for (int k = 1; k < 7; ++k) {
+										data_val = (raw_row[raw_ind + k - 1] >> (64 - k*8))
+											| ((raw_row[raw_ind + k] << (k*8)) & CHUNK_MASK);
+										row_val += data_val * challenge1[full_ind + k];
+									}
+
+									data_val = raw_row[raw_ind + 6] >> 8;
+									row_val += data_val * challenge1[full_ind + 7];
+								}
+								// XXX (end assumption that BYTES_UNDER_P equals 7)
+
+								// mod final result and save to shared vector
+								dot_prods1[i] = row_val % P57;
+
+								if (i == m-1) {
+									free(raw_row);
+								}
+							}
+
+							munmap(fdmap, filenm);
+
+							printf("thread %d finished matrix-vector mul\n", omp_get_thread_num());
+						}
+
+						double server_cpu_time = stop_time(&cpu_timer);
+						double server_comp_time = stop_time(&timer);
+
+						// write response back to client
+						start_time(&timer);
+						my_fwrite(dot_prods1, sizeof *dot_prods1, m, client);
+						fflush(client);
+						printf("Wrote %"PRIu64" bytes to client.\n", m * sizeof *dot_prods1);
+
+						// receive communication time from client and compute total, print out
+						double comm_time = 0;
+						my_fread(&comm_time, sizeof comm_time, 1, client);
+						comm_time+= stop_time(&timer);
+						printf("***SERVER COMP TIME: %f ***\n***CPU TIME: %f ***\n***COMM TIME: %f ***\n", server_comp_time, server_cpu_time, comm_time);
+
+						free(challenge1);
+						free(dot_prods1);
 					}
-					if (np) {
-						args[4] = "-np";
-						args[5] = np;
-					}
-					dup2(clientfd, 1); // dup client to stdin so mpi can pass it
-					dup2(clientfd, 0); // dido but for stdout
-					execvp(args[0], args);
-					perror("ERROR: execv failed\n");
 					break;
 
 				case 'R':
-					client = fdopen(clientfd, "r+");
 					/*retrieve stuff*/
 					fprintf(stderr, "Entering Retrieve Mode...\n");
 
@@ -230,7 +303,6 @@ done_opts:
 					break;
 
 				case 'U':
-				        client = fdopen(clientfd, "r+");
 					/*update stuff*/
 					fprintf(stderr, "Entering Update Mode...\n");
 
@@ -288,7 +360,6 @@ done_opts:
 					break;
 
 				default:
-				        client = fdopen(clientfd, "r+");
 					my_fwrite("ERROR: Invalid mode given\n", 1, 27, client);
 			}
 			fclose(client);
