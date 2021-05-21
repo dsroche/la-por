@@ -39,13 +39,19 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
     chronoaudit.clear(); chronoauditr.clear();
 
     {
-            //--------------------
+#ifdef _LAPOR_DETAILED_COMMENTS_
+        std::clog << "[SETUP] [CLIENT] starting. " << std::endl;
+#endif
+           //--------------------
 			// Client INIT
         chronoinit.start();
 
             // Random UU and VV=M^T UU
         FE_ptr uu = FFLAS::fflas_new(F,m,1);
         FFLAS::frand(F, Rand, m, uu, 1);
+#ifdef _LAPOR_DETAILED_COMMENTS_
+        std::clog << "[SETUP] [CLIENT] random U done. " << std::endl;
+#endif
 
             // VV=M^T UU
         FE_ptr vv = FFLAS::fflas_new(F,k,1);
@@ -58,15 +64,23 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
                 RowAllocatedRaw256left(F, m, k, ffrow, uu, vv,
                                        DATABASEF_NAME.c_str());
                 FFLAS::fflas_delete(ffrow);
+#ifdef _LAPOR_DETAILED_COMMENTS_
+        std::clog << "[SETUP] [CLIENT] v^T=u^T M done. " << std::endl;
+#endif
             } else {
                     // ... or just a simulation
                 FFLAS::fassign(F, std::min(k,m), uu, 1, vv, 1);
+#ifdef _LAPOR_DETAILED_COMMENTS_
+        std::clog << "[SETUP] [CLIENT] v^T=u^T M simulated. " << std::endl;
+#endif
             }
         }
 
-
             // Ciphering VV in case of public audits
         if (PublicAudit) {
+#ifdef _LAPOR_DETAILED_COMMENTS_
+        std::clog << "[SETUP] [CLIENT] [PUBLIC] starting. " << std::endl;
+#endif
             std::vector<point_t> ww(k);
             int errors(0);
             scalar_t stmp;
@@ -80,7 +94,13 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
             assert(errors == 0);
 
             WritePoints(ww, "/tmp/porww.bin");
+#ifdef _LAPOR_DETAILED_COMMENTS_
+        std::clog << "[SETUP] [CLIENT] [PUBLIC] w=E(v) done. " << std::endl;
+#endif
             CreateAndSaveMerkle("/tmp/porww.bin", "/tmp/pormerkleconf.bin", "/tmp/pormerkletree.bin", 256);
+#ifdef _LAPOR_DETAILED_COMMENTS_
+        std::clog << "[SETUP] [CLIENT] [PUBLIC] Merkle tree for w done. " << std::endl;
+#endif
         }   // ww is deleted by the end of this block
 
             // Write all to files for auditors
@@ -92,22 +112,34 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         chronoinit.stop();
         timeinit += chronoinit.realtime();
     }
+#ifdef _LAPOR_DETAILED_COMMENTS_
+    std::clog << "[SETUP] [CLIENT] done." << std::endl;
+#endif
 
         //--------------------
         // Starting AUDIT
         //   AUDIT.1: Client challenge
         //            Client generates XX and sends it to the Server
+#ifdef _LAPOR_DETAILED_COMMENTS_
+    std::clog << "[AUDIT] [CLIENT] starting." << std::endl;
+#endif
     chronoaudit.start();
     FE_ptr xx = FFLAS::fflas_new(F,k);
     FFLAS::frand(F, Rand, k, xx, 1);
     chronoaudit.stop();
     timeaudit += chronoaudit.realtime();
+#ifdef _LAPOR_DETAILED_COMMENTS_
+    std::clog << "[AUDIT] [CLIENT] x generated." << std::endl;
+#endif
 
         //--------------------
         //   AUDIT.2: Server response
         //            Server responds with YY
     chronoserver.start();
     {
+#ifdef _LAPOR_DETAILED_COMMENTS_
+    std::clog << "[AUDIT] [SERVER] starting." << std::endl;
+#endif
         FE_ptr yy = FFLAS::fflas_new(F,m);
         if (runServer) {
                 // Server is computing the matrix-vector product row by row
@@ -115,11 +147,17 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
             AllocateRaw256(F, k, ffrow);
             RowAllocatedRaw256DotProduct(F, m, k, ffrow, xx, yy, DATABASEF_NAME.c_str());
             FFLAS::fflas_delete(ffrow);
-        } else {
+#ifdef _LAPOR_DETAILED_COMMENTS_
+    std::clog << "[AUDIT] [SERVER] y=Mx done." << std::endl;
+#endif
+       } else {
                 // ... or just a simulation
             FFLAS::fassign(F, std::min(m,k), xx, 1, yy, 1);
+#ifdef _LAPOR_DETAILED_COMMENTS_
+    std::clog << "[AUDIT] [SERVER] simulated." << std::endl;
+#endif
         }
-        
+
             // Write yy to a file for the Client
         WriteRaw256(F, m, yy, "/tmp/poryy.bin");
         FFLAS::fflas_delete(yy);
@@ -129,6 +167,9 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         //--------------------
         //   AUDIT.3: Client verification
         //            Client verifies the Server response
+#ifdef _LAPOR_DETAILED_COMMENTS_
+    std::clog << "[AUDIT] [CLIENT] resuming." << std::endl;
+#endif
     chronoauditr.start();
     bool success(false);
 
@@ -142,8 +183,14 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
     typename Field::Element lhs, rhs; F.init(lhs); F.init(rhs);
     F.assign(lhs, fdot(F, m, uu, 1, yy, 1) );
 
+#ifdef _LAPOR_DETAILED_COMMENTS_
+    std::clog << "[AUDIT] [CLIENT] scalar dp done." << std::endl;
+#endif
         // 3.4a: public verification
     if (PublicAudit) {
+#ifdef _LAPOR_DETAILED_COMMENTS_
+        std::clog << "[AUDIT] [CLIENT] [PUBLIC] starting. " << std::endl;
+#endif
         std::vector<point_t> ww(k);
         ReadPoints(ww, "/tmp/porww.bin");
         int mrkverif = MerkleVerif("/tmp/porww.bin", "/tmp/pormerkleconf.bin");
@@ -152,10 +199,17 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         if (! success) {
             std::cerr << "Merkle root verification error: " << mrkverif << '.' << std::endl;
         }
+#ifdef _LAPOR_DETAILED_COMMENTS_
+        else
+            std::clog << "[AUDIT] [CLIENT] [PUBLIC] Merkle root verified. " << std::endl;
+#endif
 
             // Computing W^x
         point_t plhs, prhs;
         crypto_dotproduct_ristretto255<Field>(prhs, ww, xx);
+#ifdef _LAPOR_DETAILED_COMMENTS_
+        std::clog << "[AUDIT] [CLIENT] [PUBLIC] homorphic dp done. " << std::endl;
+#endif
 
             // Computing g^{u y}
         scalar_t slhs; Integer2scalar(slhs, lhs);
@@ -169,6 +223,10 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
             std::cerr << "W^x   : " << prhs << std::endl;
             std::cerr << "g^{uy}: " << plhs << std::endl;
         }
+#ifdef _LAPOR_DETAILED_COMMENTS_
+        else
+            std::clog << "[AUDIT] [CLIENT] [PUBLIC] response verified. " << std::endl;
+#endif
 
         // 3.4b: private verification
     } else {
@@ -176,7 +234,11 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         F.assign(rhs, fdot(F, k, vv, 1, xx, 1) );
             // Checking whether u^T y == v^T x
         success = F.areEqual(lhs,rhs);
-    }
+#ifdef _LAPOR_DETAILED_COMMENTS_
+        if (success)
+            std::clog << "[AUDIT] [CLIENT] done." << std::endl;
+#endif
+   }
 
     FFLAS::fflas_delete(uu,vv,xx,yy);
     chronoauditr.stop();
@@ -188,10 +250,6 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         std::clog << "Audit\tFAIL." << std::endl;
 
     return (!success);
-}
-
-extern "C" {
-    void update_signature(store_info_t *info, EVP_MD_CTX *ctx);
 }
 
 
@@ -243,7 +301,7 @@ int tmain(){
     if (iters > 1)
         for(size_t i=0; i<iters; ++i) {
             success &= Protocol<Field,false>(
-                timeinit[i], timeaudit[i], timeserver[i], 
+                timeinit[i], timeaudit[i], timeserver[i],
                 F, Rand, m, k, DATABASEF_NAME.c_str());
         }
 
@@ -262,7 +320,7 @@ int tmain(){
     if (iters > 1)
         for(size_t i=0; i<iters; ++i) {
             success &= Protocol<Field,true>(
-                timeinit[i], timeaudit[i], timeserver[i], 
+                timeinit[i], timeaudit[i], timeserver[i],
                 F, Rand, m, k, DATABASEF_NAME.c_str());
         }
     std::sort(timeinit.begin(),timeinit.end());
