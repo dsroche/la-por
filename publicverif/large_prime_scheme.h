@@ -332,7 +332,7 @@ Givaro::Integer fdot(const Givaro::Modular<Givaro::Integer>& F, const size_t N,
     const Givaro::Integer *  xi = x;
     const Givaro::Integer *  yi = y;
     for ( ; xi < x+N*incx; xi+=incx, yi+=incy )
-        d +=  (*xi) * (*yi);
+        Givaro::Integer::axpyin(d, *xi, *yi);
     F.reduce(d);
     return d;
     }
