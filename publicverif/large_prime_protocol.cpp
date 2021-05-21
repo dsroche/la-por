@@ -7,6 +7,7 @@ static size_t k = 512 ;
 static size_t m = 512 ;
 static size_t seed= time(NULL);
 static bool randomDB(true);
+static bool runServer(true);
 static std::string DATABASEF_NAME("/tmp/ffmat.bin");
 static Argument as[] = {
     { 'm', "-m M", "Set the row dimension of the matrix.",  TYPE_INT , &m },
@@ -15,6 +16,7 @@ static Argument as[] = {
     { 's', "-s S", "Sets seed.",							TYPE_INT , &seed },
     { 'f', "-f finame", "Set the database filename.",	TYPE_STR , &DATABASEF_NAME },
     { 'r', "-r Y/N", "Generate a random database.",		TYPE_BOOL , &randomDB },
+    { 'e', "-e Y/N", "Run server part.",		TYPE_BOOL , &runServer },
     END_OF_ARGUMENTS
 };
 
@@ -49,11 +51,17 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         FE_ptr vv = FFLAS::fflas_new(F,k,1);
         {
             FFLAS::fzero(F, k, vv, 1);
-            FE_ptr ffrow;
-            AllocateRaw256(F, k, ffrow);
-            RowAllocatedRaw256left(F, m, k, ffrow, uu, vv,
-                                   DATABASEF_NAME.c_str());
-            FFLAS::fflas_delete(ffrow);
+            if (runServer) {
+                    // Creating the control vector with the database
+                FE_ptr ffrow;
+                AllocateRaw256(F, k, ffrow);
+                RowAllocatedRaw256left(F, m, k, ffrow, uu, vv,
+                                       DATABASEF_NAME.c_str());
+                FFLAS::fflas_delete(ffrow);
+            } else {
+                    // ... or just a simulation
+                FFLAS::fassign(F, std::min(k,m), uu, 1, vv, 1);
+            }
         }
 
 
@@ -100,15 +108,20 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
     chronoserver.start();
     {
         FE_ptr yy = FFLAS::fflas_new(F,m);
-        FE_ptr ffrow;
-
-            // Server is computing the matrix-vector product row by row
-        AllocateRaw256(F, k, ffrow);
-        RowAllocatedRaw256DotProduct(F, m, k, ffrow, xx, yy, DATABASEF_NAME.c_str());
-
+        if (runServer) {
+                // Server is computing the matrix-vector product row by row
+            FE_ptr ffrow;
+            AllocateRaw256(F, k, ffrow);
+            RowAllocatedRaw256DotProduct(F, m, k, ffrow, xx, yy, DATABASEF_NAME.c_str());
+            FFLAS::fflas_delete(ffrow);
+        } else {
+                // ... or just a simulation
+            FFLAS::fassign(F, std::min(m,k), xx, 1, yy, 1);
+        }
+        
             // Write yy to a file for the Client
         WriteRaw256(F, m, yy, "/tmp/poryy.bin");
-        FFLAS::fflas_delete(yy,ffrow);
+        FFLAS::fflas_delete(yy);
     }
     chronoserver.stop(); timeserver+=chronoserver.usertime();
 
