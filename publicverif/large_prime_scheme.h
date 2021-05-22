@@ -304,7 +304,7 @@ template<typename Field>
 typename Field::Element_ptr&
 ReadAllocatedRaw256(const Field& F, size_t k, typename Field::Element_ptr& A,
                     const char * filename = DATAF_NAME) {
-    const size_t N(k<<5);
+    const size_t N(k<<5); // 32 bytes per 256-bits element
     FILE* dataf = fopen(filename, "r");
     unsigned char* data_buf = reinterpret_cast<unsigned char*>( calloc(N, 1) );
     fread(data_buf, 1, N, dataf);
@@ -337,6 +337,10 @@ Givaro::Integer fdot(const Givaro::Modular<Givaro::Integer>& F, const size_t N,
     return d;
     }
 
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/mman.h>
+
 
 template<typename Field>
 typename Field::Element_ptr&
@@ -346,13 +350,29 @@ RowAllocatedRaw256DotProduct(const Field& F, size_t m, size_t k, typename Field:
                              const char * filename = DATAF_NAME) {
 
     const size_t N(k<<5); // 32 bytes in per element
+#ifdef _LAPOR_MMAP_
+	std::clog << "[ROWDP] MMAP.\n";
+    int fd = open(filename, O_RDONLY);
+    assert (fd >= 0);
+    void* fdmap = mmap(NULL, m*N, PROT_READ, MAP_PRIVATE, fd, 0);
+    assert (fdmap != MAP_FAILED);
+    uint8_t const* udmap = reinterpret_cast<uint8_t const*>(fdmap);
+    close(fd);
+#else
+	std::clog << "[ROWDP] FREAD.\n";
     FILE* dataf = fopen(filename, "r");
     unsigned char* data_buf = reinterpret_cast<unsigned char*>( calloc(N, 1) );
+#endif
 
     for (size_t i=0; i<m; i++){
 
+#ifdef _LAPOR_MMAP_
+        uint64_t const* data_in_64s = reinterpret_cast<uint64_t const*>(udmap + (N*i));
+#else
         fread(data_buf, 1, N, dataf);
         uint64_t const* data_in_64s = reinterpret_cast<uint64_t const*>(data_buf);
+#endif
+
         for(size_t j=0; j<k; ++j) {
             scalar2Integer(A[j],
                            data_in_64s[4*j+0],
@@ -364,9 +384,12 @@ RowAllocatedRaw256DotProduct(const Field& F, size_t m, size_t k, typename Field:
         F.assign( C[i], fdot(F,k,A,1,B,1) );
 
     }
+#ifdef _LAPOR_MMAP_
+    munmap(fdmap, m*N);
+#else
     fclose(dataf);
-
     free(data_buf);
+#endif
     return C;
 }
 

@@ -8,6 +8,7 @@ static size_t m = 512 ;
 static size_t seed= time(NULL);
 static bool randomDB(true);
 static bool runServer(true);
+static bool runPublic(true);
 static std::string DATABASEF_NAME("/tmp/ffmat.bin");
 static Argument as[] = {
     { 'm', "-m M", "Set the row dimension of the matrix.",  TYPE_INT , &m },
@@ -17,6 +18,7 @@ static Argument as[] = {
     { 'f', "-f finame", "Set the database filename.",	TYPE_STR , &DATABASEF_NAME },
     { 'r', "-r Y/N", "Generate a random database.",		TYPE_BOOL , &randomDB },
     { 'e', "-e Y/N", "Run server part.",		TYPE_BOOL , &runServer },
+    { 'p', "-p Y/N", "Run public part.",		TYPE_BOOL , &runPublic },
     END_OF_ARGUMENTS
 };
 
@@ -113,7 +115,7 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         timeinit += chronoinit.realtime();
     }
 #ifdef _LAPOR_DETAILED_COMMENTS_
-    std::clog << "[SETUP] [CLIENT] done." << std::endl;
+    std::clog << "[SETUP] [CLIENT] done. " << chronoinit << std::endl;
 #endif
 
         //--------------------
@@ -135,11 +137,11 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         //--------------------
         //   AUDIT.2: Server response
         //            Server responds with YY
-    chronoserver.start();
-    {
 #ifdef _LAPOR_DETAILED_COMMENTS_
     std::clog << "[AUDIT] [SERVER] starting." << std::endl;
 #endif
+    chronoserver.start();
+    {
         FE_ptr yy = FFLAS::fflas_new(F,m);
         if (runServer) {
                 // Server is computing the matrix-vector product row by row
@@ -163,6 +165,9 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         FFLAS::fflas_delete(yy);
     }
     chronoserver.stop(); timeserver+=chronoserver.usertime();
+#ifdef _LAPOR_DETAILED_COMMENTS_
+    std::clog << "[AUDIT] [SERVER] done. " << chronoserver << std::endl;
+#endif
 
         //--------------------
         //   AUDIT.3: Client verification
@@ -283,7 +288,7 @@ int tmain(){
         FFLAS::frand(F, Rand, k, ffmat, 1);
         WriteRaw256(F, k, ffmat, DATABASEF_NAME.c_str());
         for(size_t i=1; i<m; ++i) {
-            if (! (i%1000)) std::clog << '.';
+            if ((i & 1023) == 1023) std::clog << '.';
             FFLAS::frand(F, Rand, k, ffmat, 1);
             AppendRaw256(F, k, ffmat, DATABASEF_NAME.c_str());
         }
@@ -313,6 +318,7 @@ int tmain(){
     std::clog << (1000.*timeserver[iters/2]) << " ms\t: [AUDIT SERVER] [PRIVATE] " << k  << " : " << mediandeviation(timeserver) << "% (" << iters << ')' << std::endl;
     std::clog << (1000.*timeaudit[iters/2]) << " ms\t: [AUDIT CLIENT] [PRIVATE] " << k  << " : " << mediandeviation(timeaudit) << "% (" << iters << ')' << std::endl;
 
+	if (runPublic) {
         //-------------------------
         // public Protocol
     success &= Protocol<Field,true>(timeinit[0], timeaudit[0], timeserver[0], F, Rand, m, k, DATABASEF_NAME.c_str());
@@ -330,7 +336,7 @@ int tmain(){
     std::clog << (1000.*timeinit[iters/2]) << " ms\t: [SETUP] [PUBLIC] " << k  << " : " << mediandeviation(timeinit) << "% (" << iters << ')' << std::endl;
     std::clog << (1000.*timeserver[iters/2]) << " ms\t: [AUDIT SERVER] [PUBLIC] " << k  << " : " << mediandeviation(timeserver) << "% (" << iters << ')' << std::endl;
     std::clog << (1000.*timeaudit[iters/2]) << " ms\t: [AUDIT CLIENT] [PUBLIC] " << k  << " : " << mediandeviation(timeaudit) << "% (" << iters << ')' << std::endl;
-
+	}
 
     return success;
 
