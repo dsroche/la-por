@@ -340,18 +340,63 @@ Givaro::Integer fdot(const Givaro::Modular<Givaro::Integer>& F, const size_t N,
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <omp.h>
+
+template<typename Field>
+typename Field::Element_ptr&
+MatrixVectorRightbyDotProducts(const Field& F, size_t m, size_t k,
+                               typename Field::ConstElement_ptr B,
+                               typename Field::Element_ptr& C,
+                               const char * filename = DATAF_NAME) {
+
+    const size_t N(k<<5); // 32 bytes in per element
+
+#pragma omp parallel
+    {
+        std::clog << "[ROWDP] MMAP, " << omp_get_num_threads() << " threads, on: " << omp_get_thread_num() << ".\n";
+        int fd = open(filename, O_RDONLY);
+        assert (fd >= 0);
+        void* fdmap = mmap(NULL, m*N, PROT_READ, MAP_PRIVATE, fd, 0);
+        assert (fdmap != MAP_FAILED);
+        uint8_t const* udmap = reinterpret_cast<uint8_t const*>(fdmap);
+        close(fd);
+
+        typename Field::Element_ptr A;
+        AllocateRaw256(F, k, A);
+
+#pragma omp for schedule(static) nowait
+        for(size_t i=0; i<m; ++i) {
+            uint64_t const* data_in_64s = reinterpret_cast<uint64_t const*>(udmap + (N*i));
+            for(size_t j=0; j<k; ++j) {
+                scalar2Integer(A[j],
+                               data_in_64s[4*j+0],
+                               data_in_64s[4*j+1],
+                               data_in_64s[4*j+2],
+                               data_in_64s[4*j+3]);
+                    //         std::clog << "read: " << A[i] << std::endl;
+            }
+            F.assign( C[i], fdot(F,k,A,1,B,1) );
+        }
+
+        FFLAS::fflas_delete(A);
+        munmap(fdmap, m*N);
+
+    }
+    return C;
+}
 
 
 template<typename Field>
 typename Field::Element_ptr&
-RowAllocatedRaw256DotProduct(const Field& F, size_t m, size_t k, typename Field::Element_ptr& A,
-                             typename Field::ConstElement_ptr B,
-                             typename Field::Element_ptr& C,
-                             const char * filename = DATAF_NAME) {
+LeftVectorMatrixbyDotProducts(const Field& F,
+                              size_t m, size_t k,
+                              typename Field::ConstElement_ptr B,
+                              typename Field::Element_ptr& C,
+                              const char * filename = DATAF_NAME) {
 
     const size_t N(k<<5); // 32 bytes in per element
 #ifdef _LAPOR_MMAP_
-	std::clog << "[ROWDP] MMAP.\n";
+    std::clog << "[LEFTDP] MMAP.\n";
     int fd = open(filename, O_RDONLY);
     assert (fd >= 0);
     void* fdmap = mmap(NULL, m*N, PROT_READ, MAP_PRIVATE, fd, 0);
@@ -359,73 +404,43 @@ RowAllocatedRaw256DotProduct(const Field& F, size_t m, size_t k, typename Field:
     uint8_t const* udmap = reinterpret_cast<uint8_t const*>(fdmap);
     close(fd);
 #else
-	std::clog << "[ROWDP] FREAD.\n";
+    std::clog << "[LEFTDP] FREAD.\n";
     FILE* dataf = fopen(filename, "r");
     unsigned char* data_buf = reinterpret_cast<unsigned char*>( calloc(N, 1) );
 #endif
 
-    for (size_t i=0; i<m; i++){
+    Givaro::ZRing<Givaro::Integer> ZZ;
 
+    typename Field::Element_ptr A;
+    AllocateRaw256(F, k, A);
+
+    for (size_t i=0; i<m; i++){
 #ifdef _LAPOR_MMAP_
         uint64_t const* data_in_64s = reinterpret_cast<uint64_t const*>(udmap + (N*i));
 #else
         fread(data_buf, 1, N, dataf);
         uint64_t const* data_in_64s = reinterpret_cast<uint64_t const*>(data_buf);
 #endif
-
         for(size_t j=0; j<k; ++j) {
             scalar2Integer(A[j],
                            data_in_64s[4*j+0],
                            data_in_64s[4*j+1],
                            data_in_64s[4*j+2],
                            data_in_64s[4*j+3]);
-                //         std::clog << "read: " << A[i] << std::endl;
         }
-        F.assign( C[i], fdot(F,k,A,1,B,1) );
+
+        FFLAS::faxpy(ZZ, k, B[i], A, 1, C, 1);
 
     }
+
+    FFLAS::fflas_delete(A);
+
 #ifdef _LAPOR_MMAP_
     munmap(fdmap, m*N);
 #else
     fclose(dataf);
     free(data_buf);
 #endif
-    return C;
-}
-
-
-template<typename Field>
-typename Field::Element_ptr&
-RowAllocatedRaw256left(const Field& F,
-                       size_t m, size_t k, typename Field::Element_ptr& A,
-                       typename Field::ConstElement_ptr B,
-                       typename Field::Element_ptr& C,
-                       const char * filename = DATAF_NAME) {
-
-    const size_t N(k<<5); // 32 bytes in per element
-    FILE* dataf = fopen(filename, "r");
-    unsigned char* data_buf = reinterpret_cast<unsigned char*>( calloc(N, 1) );
-
-    Givaro::ZRing<Givaro::Integer> ZZ;
-
-    for (size_t i=0; i<m; i++){
-
-        fread(data_buf, 1, N, dataf);
-        uint64_t const* data_in_64s = reinterpret_cast<uint64_t const*>(data_buf);
-        for(size_t j=0; j<k; ++j) {
-            scalar2Integer(A[j],
-                           data_in_64s[4*j+0],
-                           data_in_64s[4*j+1],
-                           data_in_64s[4*j+2],
-                           data_in_64s[4*j+3]);
-                //         std::clog << "read: " << A[i] << std::endl;
-        }
-
-        FFLAS::faxpy(ZZ, k, B[i], A, 1, C, 1);
-
-    }
-    fclose(dataf);
-    free(data_buf);
 
     FFLAS::freduce(F,k,C,1);
     return C;
@@ -508,7 +523,7 @@ int CreateAndSaveMerkle(char const * datapath, char const * configpath, char con
     // get file size
 	stat(datapath, &s);
 	fileSize = s.st_size;
-    
+
     // initiate merkle tree structure
 	store_info_t merkleinfo;
 	work_space_t wspace;

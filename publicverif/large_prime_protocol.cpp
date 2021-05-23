@@ -61,11 +61,8 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
             FFLAS::fzero(F, k, vv, 1);
             if (runServer) {
                     // Creating the control vector with the database
-                FE_ptr ffrow;
-                AllocateRaw256(F, k, ffrow);
-                RowAllocatedRaw256left(F, m, k, ffrow, uu, vv,
-                                       DATABASEF_NAME.c_str());
-                FFLAS::fflas_delete(ffrow);
+                LeftVectorMatrixbyDotProducts(F, m, k, uu, vv,
+                                              DATABASEF_NAME.c_str());
 #ifdef _LAPOR_DETAILED_COMMENTS_
         std::clog << "[SETUP] [CLIENT] v^T=u^T M done. " << std::endl;
 #endif
@@ -145,26 +142,17 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         FE_ptr yy = FFLAS::fflas_new(F,m);
         if (runServer) {
                 // Server is computing the matrix-vector product row by row
-            FE_ptr ffrow;
-            AllocateRaw256(F, k, ffrow);
-            RowAllocatedRaw256DotProduct(F, m, k, ffrow, xx, yy, DATABASEF_NAME.c_str());
-            FFLAS::fflas_delete(ffrow);
-#ifdef _LAPOR_DETAILED_COMMENTS_
-    std::clog << "[AUDIT] [SERVER] y=Mx done." << std::endl;
-#endif
-       } else {
+            MatrixVectorRightbyDotProducts(F, m, k, xx, yy,
+                                           DATABASEF_NAME.c_str());
+        } else {
                 // ... or just a simulation
             FFLAS::fassign(F, std::min(m,k), xx, 1, yy, 1);
-#ifdef _LAPOR_DETAILED_COMMENTS_
-    std::clog << "[AUDIT] [SERVER] simulated." << std::endl;
-#endif
         }
-
             // Write yy to a file for the Client
         WriteRaw256(F, m, yy, "/tmp/poryy.bin");
         FFLAS::fflas_delete(yy);
     }
-    chronoserver.stop(); timeserver+=chronoserver.usertime();
+    chronoserver.stop(); timeserver+=chronoserver.realtime();
 #ifdef _LAPOR_DETAILED_COMMENTS_
     std::clog << "[AUDIT] [SERVER] done. " << chronoserver << std::endl;
 #endif
@@ -247,7 +235,7 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
 
     FFLAS::fflas_delete(uu,vv,xx,yy);
     chronoauditr.stop();
-    timeaudit += chronoauditr.usertime();
+    timeaudit += chronoauditr.realtime();
 
     if (success)
         std::clog << "Audit\tPASS. \t" << chronoinit << ',' << chronoserver << ',' << (chronoaudit += chronoauditr) << std::endl;
