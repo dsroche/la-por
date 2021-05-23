@@ -184,7 +184,7 @@ done_opts:
 						my_fwrite(&ack, 1, 1, client);
 						fflush(client);
 
-						printf("Read %"PRIu64" bytes from client.\n", n * sizeof *challenge1);
+						fprintf(stderr, "Read %"PRIu64" bytes from client.\n", n * sizeof *challenge1);
 
 						struct timespec timer, cpu_timer;
 						start_time(&timer);
@@ -199,7 +199,7 @@ done_opts:
 
 #pragma omp parallel
 						{
-							printf("thread %d starting matrix-vector mul\n", omp_get_thread_num());
+							fprintf(stderr, "thread %d starting matrix-vector mul\n", omp_get_thread_num());
 							int fd = open(path, O_RDONLY);
 							assert (fd >= 0);
 							void *fdmap = mmap(NULL, filenm, PROT_READ, MAP_PRIVATE, fd, 0);
@@ -253,23 +253,23 @@ done_opts:
 
 							munmap(fdmap, filenm);
 
-							printf("thread %d finished matrix-vector mul\n", omp_get_thread_num());
+							fprintf(stderr, "thread %d finished matrix-vector mul\n", omp_get_thread_num());
 						}
 
-						double server_cpu_time = stop_time(&cpu_timer);
+						double server_cpu_time = stop_cpu_time(&cpu_timer);
 						double server_comp_time = stop_time(&timer);
 
 						// write response back to client
 						start_time(&timer);
 						my_fwrite(dot_prods1, sizeof *dot_prods1, m, client);
 						fflush(client);
-						printf("Wrote %"PRIu64" bytes to client.\n", m * sizeof *dot_prods1);
+						fprintf(stderr, "Wrote %"PRIu64" bytes to client.\n", m * sizeof *dot_prods1);
 
 						// receive communication time from client and compute total, print out
 						double comm_time = 0;
 						my_fread(&comm_time, sizeof comm_time, 1, client);
 						comm_time+= stop_time(&timer);
-						printf("***SERVER COMP TIME: %f ***\n***CPU TIME: %f ***\n***COMM TIME: %f ***\n", server_comp_time, server_cpu_time, comm_time);
+						fprintf(stderr, "***SERVER COMP TIME: %f ***\n***CPU TIME: %f ***\n***COMM TIME: %f ***\n", server_comp_time, server_cpu_time, comm_time);
 
 						free(challenge1);
 						free(dot_prods1);

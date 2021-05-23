@@ -1,0 +1,4 @@
+pubver_1g   1 ./large_prime_protocol -k   5839 -m   5839 -i 11 -f store/data/1g.dat   -r N
+pubver_10g  1 ./large_prime_protocol -k  18463 -m  18463 -i 11 -f store/data/10g.dat  -r N
+pubver_100g 1 ./large_prime_protocol -k  58385 -m  58385 -i 11 -f store/data/100g.dat -r N
+pubver_1t   1 ./large_prime_protocol -k 186830 -m 186830 -i 1  -f store/data/1t.dat   -r N

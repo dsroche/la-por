@@ -2,37 +2,37 @@ init_dirs    1 mkdir -pv store/data store/cconf store/sconf store/mconf store/mt
 create_1g    1 bin/random_file -s 1234 store/data/1g.dat 1g
 init0_1g     1 bin/dual_init store/data/1g.dat store/cconf/1g.dat store/sconf/1g.dat store/mconf/1g.dat store/mtree/1g.dat
 init_1g      4 bin/dual_init store/data/1g.dat trash/a trash/b trash/c trash/d
-BG     serv_1g bin/server -n 1 store/sconf/1g.dat store/mconf/1g.dat
-audit_1g     5 bin/client -a store/cconf/1g.dat store/mconf/1g.dat
+BG     serv_1g bin/server -p 2000 store/sconf/1g.dat store/mconf/1g.dat
+audit_1g     11 bin/client -a -p 2000 store/cconf/1g.dat store/mconf/1g.dat
 KILL   serv_1g
-md5_1g       5 md5sum store/data/1g.dat
-sha_1g       5 sha256sum store/data/1g.dat
+md5_1g       11 md5sum store/data/1g.dat
+sha_1g       11 sha256sum store/data/1g.dat
 create_10g   1 bin/random_file -s 1234 store/data/10g.dat 10g
 init0_10g    1 bin/dual_init store/data/10g.dat store/cconf/10g.dat store/sconf/10g.dat store/mconf/10g.dat store/mtree/10g.dat
 init_10g     4 bin/dual_init store/data/10g.dat trash/a trash/b trash/c trash/d
-BG    serv_10g bin/server -n 1 store/sconf/10g.dat store/mconf/10g.dat
-audit_10g    5 bin/client -a store/cconf/10g.dat store/mconf/10g.dat
+BG    serv_10g bin/server -p 2001 store/sconf/10g.dat store/mconf/10g.dat
+audit_10g    11 bin/client -p 2001 -a store/cconf/10g.dat store/mconf/10g.dat
 KILL  serv_10g
-md5_10g      5 md5sum store/data/10g.dat
-sha_10g      5 sha256sum store/data/10g.dat
+md5_10g      11 md5sum store/data/10g.dat
+sha_10g      11 sha256sum store/data/10g.dat
 create_100g  1 bin/random_file -s 1234 store/data/100g.dat 100g
 init0_100g   1 bin/dual_init store/data/100g.dat store/cconf/100g.dat store/sconf/100g.dat store/mconf/100g.dat store/mtree/100g.dat
 init_100g    4 bin/dual_init store/data/100g.dat trash/a trash/b trash/c trash/d
-BG   serv_100g bin/server -n 1 store/sconf/100g.dat store/mconf/100g.dat
-audit_100g   5 bin/client -a store/cconf/100g.dat store/mconf/100g.dat
+BG   serv_100g bin/server -p 2002 store/sconf/100g.dat store/mconf/100g.dat
+audit_100g   11 bin/client -p 2002 -a store/cconf/100g.dat store/mconf/100g.dat
 KILL serv_100g
-md5_100g     5 md5sum store/data/100g.dat
-sha_100g     5 sha256sum store/data/100g.dat
+md5_100g     11 md5sum store/data/100g.dat
+sha_100g     11 sha256sum store/data/100g.dat
 create_1t    1 bin/random_file -s 1234 store/data/1t.dat 1t
 init0_1t     1 bin/dual_init store/data/1t.dat store/cconf/1t.dat store/sconf/1t.dat store/mconf/1t.dat store/mtree/1t.dat
-BG     serv_1t bin/server -n 1 store/sconf/1t.dat store/mconf/1t.dat
-audit_1t     1 bin/client -a store/cconf/1t.dat store/mconf/1t.dat
+BG     serv_1t bin/server -p 2003 store/sconf/1t.dat store/mconf/1t.dat
+audit_1t     5 bin/client -p 2003 -a store/cconf/1t.dat store/mconf/1t.dat
 KILL   serv_1t
 md5_1t       1 md5sum store/data/1t.dat
 sha_1t       1 sha256sum store/data/1t.dat
 init_1t      2 bin/dual_init store/data/1t.dat trash/a trash/b trash/c /dev/null
-BG     serv_1t bin/server -n 1 store/sconf/1t.dat store/mconf/1t.dat
-audit_1t     3 bin/client -a store/cconf/1t.dat store/mconf/1t.dat
+BG     serv_1t bin/server -p 2004 store/sconf/1t.dat store/mconf/1t.dat
+audit_1t     3 bin/client -p 2004 -a store/cconf/1t.dat store/mconf/1t.dat
 KILL   serv_1t
 md5_1t       3 md5sum store/data/1t.dat
 sha_1t       3 sha256sum store/data/1t.dat
