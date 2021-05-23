@@ -1,9 +1,11 @@
 #LA-PoR publicly verifiable makefile
 
 # easy to modify OPTFLAGS on the cmdline
-OPTFLAGS=-Ofast -march=native -Wall -Wno-unused-variable -DNDEBUG
-CXXFLAGS += ${OPTFLAGS} 
+OPTFLAGS=-Ofast -march=native -Wall -Wno-unused-variable -DNDEBUG -UDEBUG
+CXXFLAGS += ${OPTFLAGS} -fopenmp
 
+OPTFLAGS += -D_LAPOR_DETAILED_COMMENTS_
+#OPTFLAGS += -D_LAPOR_DETAILED_TIMINGS_
 
 ##  openssl
 CXXFLAGS += `pkg-config openssl --cflags`
