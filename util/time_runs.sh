@@ -6,7 +6,7 @@ shopt -s nullglob
 srcdir=$(dirname "$(readlink -f "$0")")
 
 function usage {
-  echo "Usage: $0 cmdfile outdir"
+  echo "Usage: $0 cmdfile outdir [bgsleep]"
   echo "Runs command listed in cmdfile and writes timing results to directory outdir."
   echo
   echo "Lines in cmdfile should have format:"
@@ -23,13 +23,22 @@ function usage {
   echo
   echo "The first line of each such file will have the (total) CPU time"
   echo "and wall time, in seconds, space-separated."
+  echo
+  echo "The third (optional) argument bgsleep indicates how many seconds to pause"
+  echo "when starting a BG job. The default is 1 second."
   [[ $# -eq 1 ]] && exit $1
 }
 
 # written to the end of every output file to signal completion
 finishline="FINISH"
 
-[[ $# -eq 2 ]] || usage 1
+if [[ $# -eq 2 ]]; then
+  bgsleep=1
+elif [[ $# -eq 3 ]]; then
+  bgsleep=$3
+else
+  usage 1
+fi
 
 cmdfile=$1
 [[ -r $cmdfile ]] || usage 2
@@ -63,12 +72,12 @@ while read -u4 ident numruns cmd; do
     bgout="$tmpdir/bg-$bgid.out"
     $cmd >"$bgout" 2>&1 &
     bgpids["$bgid"]=$!
-    sleep 1
+    sleep $bgsleep
   elif [[ $ident = "KILL" ]]; then
     bgid=$numruns
     echo "Killing background process $bgid"
     kill "${bgpids["$bgid"]}"
-    sleep 1
+    sleep $bgsleep
     unset "bgpids[$bgid]"
     rm -f "$bgout"
     unset "bgout"
@@ -85,17 +94,13 @@ while read -u4 ident numruns cmd; do
         fi
       fi
       if [[ -v "bgout" ]]; then
-        tail -c0 -f "$bgout" >"$tmp_bgout" &
-        tailer=$!
+        bgstart=$(wc -l <"$bgout")
       fi
       echo "running $ident ($i of $numruns)"
       set +e
       /usr/bin/time --quiet -f '%e %S %U' -o "$tmp_time1" /usr/bin/time -v -o "$tmp_time2" $cmd >"$tmp_stdout" 2>"$tmp_stderr"
       ecode=$?
       set -e
-      if [[ -v "bgout" ]]; then
-        kill -INT "$tailer"
-      fi
       exec 5<"$tmp_time1"
       read -u5 wall user sys
       exec 5<&-
@@ -115,11 +120,12 @@ while read -u4 ident numruns cmd; do
           echo "stderr:"
           cat "$tmp_stderr"
         fi
-        if [[ -s $tmp_bgout ]]; then
+        if [[ -v "bgstart" ]]; then
+          sleep 1
           echo
           echo "background output:"
-          cat "$tmp_bgout"
-          rm -f "$tmp_bgout"
+          tail -n +"$bgstart" "$bgout"
+          unset bgstart
         fi
         echo
         if [[ $ecode -eq 0 ]]; then
