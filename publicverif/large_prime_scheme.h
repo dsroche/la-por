@@ -339,8 +339,18 @@ Givaro::Integer fdot(const Givaro::Modular<Givaro::Integer>& F, const size_t N,
 
 #include <fcntl.h>
 #include <unistd.h>
-#include <sys/mman.h>
 #include <omp.h>
+
+#ifdef POR_MMAP
+#include <sys/mman.h>
+#endif
+extern "C" {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#pragma GCC diagnostic ignored "-Wpointer-arith"
+#include <integrity.h>
+#pragma GCC diagnostic pop
+}
 
 template<typename Field>
 typename Field::Element_ptr&
@@ -353,20 +363,30 @@ MatrixVectorRightbyDotProducts(const Field& F, size_t m, size_t k,
 
 #pragma omp parallel
     {
-        std::clog << "[ROWDP] MMAP, " << omp_get_num_threads() << " threads, on: " << omp_get_thread_num() << ".\n";
         int fd = open(filename, O_RDONLY);
         assert (fd >= 0);
+#ifdef POR_MMAP
+        std::clog << "[ROWDP] MMAP, " << omp_get_num_threads() << " threads, on: " << omp_get_thread_num() << ".\n";
         void* fdmap = mmap(NULL, m*N, PROT_READ, MAP_PRIVATE, fd, 0);
         assert (fdmap != MAP_FAILED);
         uint8_t const* udmap = reinterpret_cast<uint8_t const*>(fdmap);
         close(fd);
+#else // no MMAP
+        std::clog << "[ROWDP] PREAD, " << omp_get_num_threads() << " threads, on: " << omp_get_thread_num() << ".\n";
+        uint64_t *data_in_64s = reinterpret_cast<uint64_t*>(malloc(N));
+        assert (data_in_64s);
+#endif // POR_MMAP
 
         typename Field::Element_ptr A;
         AllocateRaw256(F, k, A);
 
 #pragma omp for schedule(static) nowait
         for(size_t i=0; i<m; ++i) {
+#ifdef POR_MMAP
             uint64_t const* data_in_64s = reinterpret_cast<uint64_t const*>(udmap + (N*i));
+#else // no MMAP
+            my_pread(fd, data_in_64s, N, N*i);
+#endif // POR_MMAP
             for(size_t j=0; j<k; ++j) {
                 scalar2Integer(A[j],
                                data_in_64s[4*j+0],
@@ -379,7 +399,11 @@ MatrixVectorRightbyDotProducts(const Field& F, size_t m, size_t k,
         }
 
         FFLAS::fflas_delete(A);
+#ifdef POR_MMAP
         munmap(fdmap, m*N);
+#else // no MMAP
+        free(data_in_64s);
+#endif // POR_MMAP
 
     }
     return C;

@@ -25,6 +25,8 @@ MRKINC=../merkle/include
 CXXFLAGS += -I${MRKINC} -Drestrict=__restrict__
 LOADLIBES+= -L${MRKDIR} -lmerkle
 
+## LA-PoR pread
+CXXFLAGS += -I../include -I../tinymt64/include
 
 ## Hard path setting
 HARDLIBES = ${subst -L,, ${shell pkg-config fflas-ffpack --libs-only-L}}

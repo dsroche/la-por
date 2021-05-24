@@ -1,3 +1,6 @@
+#ifndef LAPOR_INTEGRITY_H
+#define LAPOR_INTEGRITY_H
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -10,9 +13,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdbool.h>
-#include "merkle.h"
-#include "tinymt64.h"
-#include "mytimer.h"
+#include <merkle.h>
+#include <tinymt64.h>
+#include <mytimer.h>
 
 #if __APPLE__
 	#define _CHUNK_SPECIFIER "%llu"
@@ -40,7 +43,7 @@ static inline uint64_t rand_mod_p(tinymt64_t* state) {
 
 static inline void my_pread(int fd, void* buf, size_t count, off_t offset) {
 	ssize_t res = pread(fd, buf, count, offset);
-	if (res == count)
+	if (res == (ssize_t)count)
 		return;
 	size_t got = 0;
 	while (1) {
@@ -64,7 +67,7 @@ static inline void my_pread(int fd, void* buf, size_t count, off_t offset) {
 
 static inline void my_pwrite(int fd, const void * buf, size_t count, off_t offset) {
 	ssize_t res = pwrite(fd, buf, count, offset);
-	if (res == count)
+	if (res == (ssize_t)count)
 		return;
 	size_t gave = 0;
 	while (1) {
@@ -85,3 +88,5 @@ static inline void my_pwrite(int fd, const void * buf, size_t count, off_t offse
 		res = pwrite(fd, buf + gave, count - gave, offset + gave);
 	};
 }
+
+#endif // LAPOR_INTEGRITY_H
