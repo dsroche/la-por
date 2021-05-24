@@ -17,6 +17,7 @@ find_package(OpenMP 4.5 REQUIRED)
 
 # set variables
 set(CC "gcc")
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Ofast -march=native -std=gnu99 -Wno-missing-prototypes -DPOR_MMAP -DNDEBUG -Wno-unused -g")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Ofast -march=native -std=gnu99 -Wno-missing-prototypes -DNDEBUG -Wno-unused -g")
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin)
 

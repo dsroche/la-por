@@ -10,7 +10,9 @@
 #include <omp.h>
 #include <fcntl.h>
 #include <unistd.h>
+#ifdef POR_MMAP
 #include <sys/mman.h>
+#endif
 
 int server;
 int clientfd;
@@ -41,6 +43,31 @@ uint64_t retrieveAndSend(uint64_t index, FILE* data, FILE* sock);
 bool read_hash(uint64_t index, char* hash, FILE* merkle, const store_info_t* info);
 bool send_blocks(uint64_t offset, uint64_t count, uint32_t lbsize, FILE* data, FILE* sock, const store_info_t* info);
 void my_fwrite_rreq(read_req_t* rreq, uint64_t bufsize, FILE* sock, const store_info_t* info);
+
+static inline void my_pread(int fd, void* buf, size_t count, off_t offset) {
+	ssize_t res = pread(fd, buf, count, offset);
+	if (res == count)
+		return;
+	size_t got = 0;
+	while (1) {
+		if (res > 0) {
+			got += res;
+			if (got >= count)
+				return;
+		}
+		else if (res == 0) {
+			// EOF; zero out the rest
+			memset(buf + got, 0, count - got);
+			return;
+		}
+		else {
+			perror("pread in my_pread");
+			exit(10);
+		}
+		res = pread(fd, buf + got, count - got, offset + got);
+	};
+}
+
 
 int main(int argc, char* argv[]) {
 
@@ -175,6 +202,11 @@ done_opts:
 					/*audit stuff*/
 					{
 						fprintf(stderr, "Entering Audit Mode...\n");
+#ifdef POR_MMAP
+						fprintf(stderr, "using mmap for file reads\n");
+#else // no MMAP
+						fprintf(stderr, "using pread for file reads\n");
+#endif // POR_MMAP
 
 						uint64_t *challenge1 = malloc(n * sizeof *challenge1);
 						uint64_t *dot_prods1 = malloc(m * sizeof *dot_prods1);
@@ -202,13 +234,19 @@ done_opts:
 							fprintf(stderr, "thread %d starting matrix-vector mul\n", omp_get_thread_num());
 							int fd = open(path, O_RDONLY);
 							assert (fd >= 0);
+#ifdef POR_MMAP
 							void *fdmap = mmap(NULL, filenm, PROT_READ, MAP_PRIVATE, fd, 0);
 							assert (fdmap != MAP_FAILED);
 							close(fd);
+#else // no MMAP
+							uint64_t *raw_row = malloc(bytes_per_row);
+							assert (raw_row);
+#endif // POR_MMAP
 
 #pragma omp for schedule(static) nowait
 							for (size_t i = 0; i < m; ++i) {
 								// get a pointer to the row
+#ifdef POR_MMAP
 								uint64_t *raw_row;
 								if (i < m-1) {
 									raw_row = fdmap + (bytes_per_row * i);
@@ -217,6 +255,9 @@ done_opts:
 									raw_row = calloc(bytes_per_row, 1);
 									memcpy(raw_row, fdmap + (bytes_per_row * i), filenm - (bytes_per_row * i));
 								}
+#else // no MMAP
+								my_pread(fd, raw_row, bytes_per_row, bytes_per_row * i);
+#endif // POR_MMAP
 
 								// XXX: this part assumes BYTES_UNDER_P equals 7
 								// dot product accross the row, 56 bytes (8 chunks) at a time
@@ -246,12 +287,19 @@ done_opts:
 								// mod final result and save to shared vector
 								dot_prods1[i] = row_val % P57;
 
+#ifdef POR_MMAP
 								if (i == m-1) {
 									free(raw_row);
 								}
+#endif // POR_MMAP
 							}
 
+#ifdef POR_MMAP
 							munmap(fdmap, filenm);
+#else // no MMAP
+							free(raw_row);
+							close(fd);
+#endif // POR_MMAP
 
 							fprintf(stderr, "thread %d finished matrix-vector mul\n", omp_get_thread_num());
 						}
