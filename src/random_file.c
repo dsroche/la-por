@@ -5,6 +5,10 @@
 #include "integrity.h"
 #include <sys/random.h>
 #include <getopt.h>
+#include <fcntl.h>
+#include <omp.h>
+
+#define ROW_SIZE_BYTES (4194304) // 4MB
 
 void usage(const char* arg0) {
 	fprintf(stderr, "usage: %s [OPTIONS] <output_datafile> <size_spec>\n"
@@ -20,8 +24,8 @@ void usage(const char* arg0) {
 }
 
 int main(int argc, char* argv[]) {
-	FILE* dataout;
-	size_t nbytes;
+	int datafd;
+	uint64_t nbytes;
 
 	int seeded = 0;
 	uint64_t seed;
@@ -62,8 +66,8 @@ done_opts:
 	}
 
 	const char* fname = argv[optind];
-	if ((dataout = fopen(fname, "w")) == NULL) {
-		fprintf(stderr, "Cannot open output data file '%s'\n", fname);
+	if ((datafd = open(fname, O_WRONLY|O_CREAT, 0644)) < 0) {
+		perror("could not open output file");
 		return 2;
 	}
 
@@ -96,6 +100,13 @@ done_opts:
 		}
 	}
 
+	fprintf(stderr, "setting file length with ftruncate...");
+	if (ftruncate(datafd, nbytes)) {
+		perror("could not set file length as specified");
+		return 2;
+	}
+	fprintf(stderr, "done\n");
+
 	// seed RNG
 	if (! seeded) {
 #if __APPLE__
@@ -111,21 +122,37 @@ done_opts:
 #endif
 	}
 
-	tinymt64_t state;
-	tinymt64_init(&state, seed);
+	uint64_t nrows = 1 + (nbytes - 1) / ROW_SIZE_BYTES;
+	const static uint64_t ROW_SIZE_64 = ROW_SIZE_BYTES / 8;
 
-	size_t remain = nbytes;
-	while (remain >= sizeof(uint64_t)) {
-		uint64_t val = tinymt64_generate_uint64(&state);
-		fwrite(&val, sizeof val, 1, dataout);
-		remain -= sizeof val;
-	}
-	if (remain) {
-		uint64_t val = tinymt64_generate_uint64(&state);
-		fwrite(&val, remain, 1, dataout);
+#pragma omp parallel
+	{
+		fprintf(stderr, "thread %d starting parallel writes\n", omp_get_thread_num());
+		uint64_t *raw_row = malloc(ROW_SIZE_BYTES);
+		assert (raw_row);
+
+#pragma omp for nowait
+		for (uint64_t i = 0; i < nrows; ++i) {
+			tinymt64_t state = {0};
+			tinymt64_init(&state, seed + i);
+
+			for (size_t j = 0; j < ROW_SIZE_64; ++j) {
+				raw_row[j] = tinymt64_generate_uint64(&state);
+			}
+
+			uint64_t offset = i * ROW_SIZE_BYTES;
+			if (i == nrows - 1) {
+				my_pwrite(datafd, raw_row, nbytes - offset, offset);
+			}
+			else {
+				my_pwrite(datafd, raw_row, ROW_SIZE_BYTES, offset);
+			}
+		}
+
+		fprintf(stderr, "thread %d finished\n", omp_get_thread_num());
 	}
 
-	fclose(dataout);
+	close(datafd);
 
 	printf("successfully wrote %lu bytes to %s\n", nbytes, fname);
 

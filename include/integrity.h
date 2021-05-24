@@ -37,3 +37,51 @@ static inline uint64_t rand_mod_p(tinymt64_t* state) {
   } while (val >= P57);
   return val;
 }
+
+static inline void my_pread(int fd, void* buf, size_t count, off_t offset) {
+	ssize_t res = pread(fd, buf, count, offset);
+	if (res == count)
+		return;
+	size_t got = 0;
+	while (1) {
+		if (res > 0) {
+			got += res;
+			if (got >= count)
+				return;
+		}
+		else if (res == 0) {
+			// EOF; zero out the rest
+			memset(buf + got, 0, count - got);
+			return;
+		}
+		else {
+			perror("pread in my_pread");
+			exit(10);
+		}
+		res = pread(fd, buf + got, count - got, offset + got);
+	};
+}
+
+static inline void my_pwrite(int fd, const void * buf, size_t count, off_t offset) {
+	ssize_t res = pwrite(fd, buf, count, offset);
+	if (res == count)
+		return;
+	size_t gave = 0;
+	while (1) {
+		if (res > 0) {
+			gave += res;
+			if (gave >= count)
+				return;
+		}
+		else if (res == 0) {
+			// strange
+			fprintf(stderr, "ERROR: pwrite couldn't write any more bytes\n");
+			exit(10);
+		}
+		else {
+			perror("pwrite in my_pwrite");
+			exit(10);
+		}
+		res = pwrite(fd, buf + gave, count - gave, offset + gave);
+	};
+}

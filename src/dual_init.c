@@ -5,7 +5,9 @@
 #include <omp.h>
 #include <fcntl.h>
 #include <unistd.h>
+#ifdef POR_MMAP
 #include <sys/mman.h>
+#endif
 
 /*****Compile with -lm flag due to inclusion of math.h*****/
 /***Compile using Makefile due to Mersenne Twist library***/
@@ -46,28 +48,6 @@ int main(int argc, char* argv[]) {
 	stat(argv[1], &s);
 	off_t fileSize = s.st_size;
 	printf("The size of <%s> is %"PRIu64".\n", argv[1], fileSize);
-
-	start_time(&timer);
-	 // initiate merkle tree structure
-	 store_info_t merkleinfo;
-	 work_space_t wspace;
-
-	 merkleinfo.hash_nid = OBJ_txt2nid(DEFAULT_DIGEST);
-	 merkleinfo.block_size = DEFAULT_BLOCKSIZE;
-	 merkleinfo.size = fileSize;
-	 
-	 store_info_fillin(&merkleinfo);
-	 init_work_space(&merkleinfo, &wspace);
-
-	 // create merkle tree over data - stored in ftree
-	 init_root(fin, ftree, &merkleinfo, &wspace);
-	 fclose(fin);
-
-	 // store details in merkle config
-	 store_info_store(fmerkle, true, &merkleinfo);
-
-	double merkle_time = stop_time(&timer);
-	printf("merkle took %lg seconds\n", merkle_time);
 
 	// calculate dimensions of matrix and write then to both configs
 	// n: number of columns
@@ -128,9 +108,14 @@ int main(int argc, char* argv[]) {
 		size_t accum_count = 0;
 		int fd = open(argv[1], O_RDONLY);
 		assert (fd >= 0);
+#ifdef POR_MMAP
 		void *fdmap = mmap(NULL, fileSize, PROT_READ, MAP_PRIVATE, fd, 0);
 		assert (fdmap != MAP_FAILED);
 		close(fd);
+#else // no MMAP
+		uint64_t *raw_row = malloc(bytes_per_row);
+		assert (raw_row);
+#endif // POR_MMAP
 
 #pragma omp for schedule(static) nowait
 		for (size_t i = 0; i < m; i++) {
@@ -142,6 +127,7 @@ int main(int argc, char* argv[]) {
 				accum_count = 1;
 			}
 
+#ifdef POR_MMAP
 			// get a pointer to the row
 			uint64_t *raw_row;
 			if (i < m-1) {
@@ -151,6 +137,9 @@ int main(int argc, char* argv[]) {
 				raw_row = calloc(bytes_per_row, 1);
 				memcpy(raw_row, fdmap + (bytes_per_row * i), fileSize - (bytes_per_row * i));
 			}
+#else // no MMAP
+			my_pread(fd, raw_row, bytes_per_row, bytes_per_row * i);
+#endif // POR_MMAP
 
 			// XXX: this part assumes BYTES_UNDER_P equals 7
 			assert (BYTES_UNDER_P == 7);
@@ -170,12 +159,19 @@ int main(int argc, char* argv[]) {
 			}
 			// XXX (end assumption that BYTES_UNDER_P equals 7)
 
+#ifdef POR_MMAP
 			if (i == m-1) {
 				free(raw_row);
 			}
+#endif // POR_MMAP
 		}
 
+#ifdef POR_MMAP
 		munmap(fdmap, fileSize);
+#else // no MMAP
+		free(raw_row);
+		close(fd);
+#endif // POR_MMAP
 
 		// mod reduction before parallel accumulate
 		for (size_t k = 0; k < n; ++k) {
@@ -206,16 +202,38 @@ int main(int argc, char* argv[]) {
 
 	/*printf("\n");*/
 	printf("Secret vectors appended to <%s>.\n", argv[2]);
+	fclose(fclient);
+	fclose(fserver);
+  printf("Client config <%s> completed.\nServer config <%s> completed.\n",
+	argv[2], argv[3]);
+
+	start_time(&timer);
+	 // initiate merkle tree structure
+	 store_info_t merkleinfo;
+	 work_space_t wspace;
+
+	 merkleinfo.hash_nid = OBJ_txt2nid(DEFAULT_DIGEST);
+	 merkleinfo.block_size = DEFAULT_BLOCKSIZE;
+	 merkleinfo.size = fileSize;
+	 
+	 store_info_fillin(&merkleinfo);
+	 init_work_space(&merkleinfo, &wspace);
+
+	 // create merkle tree over data - stored in ftree
+	 init_root(fin, ftree, &merkleinfo, &wspace);
+	 fclose(fin);
+
+	 // store details in merkle config
+	 store_info_store(fmerkle, true, &merkleinfo);
+
+	double merkle_time = stop_time(&timer);
+	printf("merkle took %lg seconds\n", merkle_time);
 
 
 	// cleanup
-	fclose(fclient);
-	fclose(fserver);
 	 fclose(fmerkle);
 	 fclose(ftree);
 	 clear_work_space(&wspace);
-    printf("Client config <%s> completed.\nServer config <%s> completed.\n",
-	  argv[2], argv[3]);
 
 	/*fserver = fopen(argv[3], "r");*/
 	/*uint64_t test;*/

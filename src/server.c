@@ -44,30 +44,6 @@ bool read_hash(uint64_t index, char* hash, FILE* merkle, const store_info_t* inf
 bool send_blocks(uint64_t offset, uint64_t count, uint32_t lbsize, FILE* data, FILE* sock, const store_info_t* info);
 void my_fwrite_rreq(read_req_t* rreq, uint64_t bufsize, FILE* sock, const store_info_t* info);
 
-static inline void my_pread(int fd, void* buf, size_t count, off_t offset) {
-	ssize_t res = pread(fd, buf, count, offset);
-	if (res == count)
-		return;
-	size_t got = 0;
-	while (1) {
-		if (res > 0) {
-			got += res;
-			if (got >= count)
-				return;
-		}
-		else if (res == 0) {
-			// EOF; zero out the rest
-			memset(buf + got, 0, count - got);
-			return;
-		}
-		else {
-			perror("pread in my_pread");
-			exit(10);
-		}
-		res = pread(fd, buf + got, count - got, offset + got);
-	};
-}
-
 
 int main(int argc, char* argv[]) {
 
