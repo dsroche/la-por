@@ -4,9 +4,9 @@
 // third arg is IP (or "localhost" or "gserver")
 // fourth arg is port number to connect to
 
-#include "integrity.h"
 #include <sys/random.h>
 #include <getopt.h>
+#include <integrity.h>
 
 #define MAX(a,b) ((a) < (b) ? (b) : (a))
 
