@@ -81,6 +81,7 @@ while read -u4 ident numruns cmd; do
     unset "bgpids[$bgid]"
     rm -f "$bgout"
     unset "bgout"
+    unset "bgstart"
   else
     if [[ -z $cmd ]]; then
       echo "ERROR: invalid cmdfile line: $ident $numruns $cmd"
@@ -124,8 +125,8 @@ while read -u4 ident numruns cmd; do
           sleep 1
           echo
           echo "background output:"
-          tail -n +"$bgstart" "$bgout"
-          unset bgstart
+          tail -n +$(( bgstart + 1 )) "$bgout"
+          unset "bgstart"
         fi
         echo
         if [[ $ecode -eq 0 ]]; then
