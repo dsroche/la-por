@@ -172,7 +172,13 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
         // 3.2: Receiving the server result
     FE_ptr yy; ReadRaw256(F, m, yy, "/tmp/poryy.bin");
 
-        // 3.3: Computing u^T . y
+    if (! runServer) {
+            // Cleaning artefacts of raw reading with Identity+ZeroMatrix ...
+        FFLAS::fzero(F, k-std::min(k,m), vv+std::min(k,m), 1);
+        FFLAS::fzero(F, m-std::min(k,m), yy+std::min(k,m), 1);
+    }
+
+         // 3.3: Computing u^T . y
     typename Field::Element lhs, rhs; F.init(lhs); F.init(rhs);
     F.assign(lhs, fdot(F, m, uu, 1, yy, 1) );
 
