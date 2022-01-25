@@ -48,6 +48,7 @@ int main(int argc, char* argv[]) {
 	stat(argv[1], &s);
 	off_t fileSize = s.st_size;
 	printf("The size of <%s> is %"PRIu64".\n", argv[1], fileSize);
+    fflush(stdout);
 
 	// calculate dimensions of matrix and write then to both configs
 	// n: number of columns
@@ -57,6 +58,7 @@ int main(int argc, char* argv[]) {
 	uint64_t n = ceil(sqrt((double)num_chunks) / CHUNK_ALIGN) * CHUNK_ALIGN;
 	uint64_t m = 1 + (num_chunks - 1) / n;
 	printf("Using m = %"PRIu64", n = %"PRIu64".\n", m, n);
+    fflush(stdout);
 	fwrite(&n, sizeof(uint64_t), 1, fclient);
 	fwrite(&m, sizeof(uint64_t), 1, fclient);
 	fwrite(&n, sizeof(uint64_t), 1, fserver);
@@ -74,6 +76,7 @@ int main(int argc, char* argv[]) {
 	fwrite(&pathSize, sizeof(pathSize), 1, fserver);
 	fwrite(actualPath, 1, pathSize, fserver);
 	printf("Wrote <%s> of size of %d\n", actualPath, pathSize);
+    fflush(stdout);
 
 	// create random vector of size m and write to client config
 	// using Tiny Mersenne Twister as pseudo-random number generator
@@ -88,6 +91,7 @@ int main(int argc, char* argv[]) {
 	}
 	fwrite(vector1, sizeof *vector1, m, fclient);
 	printf("Random vectors appended to %s.\n", argv[2]);
+    fflush(stdout);
 
 	start_time(&timer);
 
@@ -97,6 +101,7 @@ int main(int argc, char* argv[]) {
 	// also appends input to server config along the way
 	uint128_t* partials1 = calloc(n, sizeof *partials1);
 	printf("Reading from <%s>...\n", argv[1]);
+    fflush(stdout);
 
 	uint64_t bytes_per_row = BYTES_UNDER_P * n;
 	assert (n % 8 == 0);
@@ -180,6 +185,7 @@ int main(int argc, char* argv[]) {
 		printf("thread %d finished vector-matrix mul\n", omp_get_thread_num());
 	}
 
+    fflush(stdout);
 	free(vector1);
 
 	// final mod reduction after parallel accumulate
@@ -189,6 +195,7 @@ int main(int argc, char* argv[]) {
 
 	double mul_time = stop_time(&timer);
 	printf("vector-matrix mul took %lg seconds\n", mul_time);
+    fflush(stdout);
 
 	// write sums (secret vectors) to the client config
 	uint64_t *secret1 = malloc(n * sizeof *secret1);
@@ -206,6 +213,7 @@ int main(int argc, char* argv[]) {
 	fclose(fserver);
   printf("Client config <%s> completed.\nServer config <%s> completed.\n",
 	argv[2], argv[3]);
+    fflush(stdout);
 
 	start_time(&timer);
 	 // initiate merkle tree structure
