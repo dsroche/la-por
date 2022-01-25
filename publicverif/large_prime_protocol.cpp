@@ -5,7 +5,9 @@
 static size_t iters = 3 ;
 static size_t k = 512 ;
 static size_t m = 512 ;
+static size_t bits = 252 ;
 static size_t seed= time(NULL);
+static std::string primeorder("7237005577332262213973186563042994240857116359379907606001950938285454250989");
 static bool randomDB(true);
 static bool runServer(true);
 static bool runPublic(true);
@@ -15,10 +17,12 @@ static Argument as[] = {
     { 'k', "-k K", "Set the col dimension of the matrix.",  TYPE_INT , &k },
     { 'i', "-i R", "Set number of repetitions.",            TYPE_INT , &iters },
     { 's', "-s S", "Sets seed.",							TYPE_INT , &seed },
-    { 'f', "-f finame", "Set the database filename.",	TYPE_STR , &DATABASEF_NAME },
+    { 'f', "-f filename", "Set the database filename.",	TYPE_STR , &DATABASEF_NAME },
     { 'r', "-r Y/N", "Generate a random database.",		TYPE_BOOL , &randomDB },
     { 'e', "-e Y/N", "Run server part.",		TYPE_BOOL , &runServer },
     { 'p', "-p Y/N", "Run public part.",		TYPE_BOOL , &runPublic },
+    { 'b', "-b bits", "Size of the field.",		TYPE_INT , &bits },
+    { 'q', "-q string", "Prime order.",		TYPE_STR , &primeorder },
     END_OF_ARGUMENTS
 };
 
@@ -255,16 +259,16 @@ bool Protocol(double& timeinit, double& timeaudit, double& timeserver,
 template<typename Ints, typename Comps=Ints>
 int tmain(){
         // argv[1]: size of the vector dotproduct to benchmark
-    const size_t bits(252);
-
     srand( (int)seed);
     srand48(seed);
     Givaro::Integer::seeding(seed);
 
         //-------------------------
         // Ristretto255 prime order
-    Givaro::Integer p("27742317777372353535851937790883648493");
-    p += Givaro::Integer(1)<<=252;
+//     Givaro::Integer p("27742317777372353535851937790883648493");
+//     p += Givaro::Integer(1)<<=bits;
+    Givaro::Integer p(primeorder.c_str());
+    std::clog << "[PRIME ORDER] " << p << std::endl;
 
     std::vector<double> timeinit(iters), timeaudit(iters), timeserver(iters);
 
