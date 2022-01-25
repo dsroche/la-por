@@ -15,11 +15,10 @@ void usage(const char* arg0) {
 			"	-s --seed <number>		specify random seed\n"
 			"	-h --help			show this help menu\n"
                         "<size_spec> should be a positive integer, followed optionally by one of\n"
-                        "  K: KB (10^3 bytes)\n"
-                        "  K: MB (10^6 bytes)\n"
-                        "  K: MB (10^6 bytes)\n"
-                        "  G: GB (10^9 bytes)\n"
-                        "  T: TB (10^12 bytes)\n"
+                        "  K: KB (2^10 bytes)\n"
+                        "  M: MB (2^20 bytes)\n"
+                        "  G: GB (2^30 bytes)\n"
+                        "  T: TB (2^40 bytes)\n"
 			, arg0);
 }
 
@@ -83,16 +82,16 @@ done_opts:
 			case '\0':
 				break;
 			case 'k': case 'K':
-				nbytes *= 1000ul;
+				nbytes *= 1024ul;
 				break;
 			case 'm': case 'M':
-				nbytes *= 1000000ul;
+				nbytes *= 1048576ul;
 				break;
 			case 'g': case 'G':
-				nbytes *= 1000000000ul;
+				nbytes *= 1073741824ul;
 				break;
 			case 't': case 'T':
-				nbytes *= 1000000000000ul;
+				nbytes *= 1099511627776ul;
 				break;
 			default:
 				fprintf(stderr, "invalid size specification '%s'\n", convstr);
