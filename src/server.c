@@ -109,7 +109,7 @@ done_opts:
 	// read in dimensions
 	uint64_t n, m;
 	my_fread(&n, sizeof(uint64_t), 1, fconfig);
-	my_fread(&m, sizeof(uint64_t), 1, fconfig);	
+	my_fread(&m, sizeof(uint64_t), 1, fconfig);
 
 	// open data file
 	int pathSize;
@@ -131,6 +131,14 @@ done_opts:
 
 	// open TCP socket
 	server = socket(AF_INET, SOCK_STREAM, 0);
+    int reuse = 1;
+    if (setsockopt(server, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) < 0) {
+        perror("setsockopt(SO_REUSEADDR) failed");
+    }
+    if (setsockopt(server, SOL_SOCKET, SO_REUSEPORT, (const char*)&reuse, sizeof(reuse)) < 0){
+        perror("setsockopt(SO_REUSEPORT) failed");
+    }
+
 
 	// server address -- use port from user
 	struct sockaddr_in host_addr, client_addr;
@@ -140,7 +148,7 @@ done_opts:
 	host_addr.sin_addr.s_addr=INADDR_ANY;
 
    // bind server socket
-	if( bind(server, (struct sockaddr*) &host_addr, sizeof(struct sockaddr)) < 0){	
+	if( bind(server, (struct sockaddr*) &host_addr, sizeof(struct sockaddr)) < 0){
 		perror("bind");
 		return 1;
 	}
@@ -293,7 +301,7 @@ done_opts:
 						double comm_time = 0;
 						my_fread(&comm_time, sizeof comm_time, 1, client);
 						comm_time+= stop_time(&timer);
-						fprintf(stderr, "***SERVER COMP TIME: %f ***\n***CPU TIME: %f ***\n***COMM TIME: %f ***\n", server_comp_time, server_cpu_time, comm_time);
+						fprintf(stderr, "***SERVER COMP TIME: %f ***\n***SERVER CPU  TIME: %f ***\n***SERVER COMM TIME: %f ***\n", server_comp_time, server_cpu_time, comm_time);
 
 						free(challenge1);
 						free(dot_prods1);
@@ -363,7 +371,7 @@ done_opts:
 						// update the old value for this byte
 						*oldByte = curByte;
 						oldByte++;
-						
+
 						// if this is the last byte in a chunk or last overall,
 						// update the database
 						if ( (curr % sizeof(uint64_t)) == 7 || curr == final) {
