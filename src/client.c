@@ -38,8 +38,8 @@ int main(int argc, char* argv[]) {
 	struct sockaddr_in addr;
 	memset(&(addr), '\0', sizeof(addr));
 	short port = 2020; /*defaults to port 2020*/
-	struct timespec timer;
-	double client_comp_time = 0;
+	struct timespec timer, cpu_timer;
+	double client_comp_time = 0, client_cpu_time = 0;
 	double comm_time = 0;
 	int trash;
 	int audit = 0;
@@ -171,10 +171,12 @@ done_opts:
 			
 			// create and send challenge vectors (of size n)
 			start_time(&timer);				/* START COMP TIMER */
+            start_cpu_time(&cpu_timer);
 			uint64_t* challenge1;
 			uint64_t challengeBytes = n * sizeof(uint64_t);
 			challenge1 = makeChallengeVector(n);
 			client_comp_time = stop_time(&timer);		/* PAUSE COMP TIMER */
+            client_cpu_time = stop_cpu_time(&cpu_timer);
 			start_time(&timer);				/* START COMM TIMER */
 			my_fwrite(challenge1, 1, challengeBytes, sock);
 			fflush(sock);
@@ -202,14 +204,16 @@ done_opts:
 			// run audit and report to client
 			// use m for size
 			start_time(&timer);				/* RESUME COMP TIMER */
+            start_cpu_time(&cpu_timer);
 			int audit = runAudit(fconfig, challenge1,
 							response1, n, m);
 			client_comp_time += stop_time(&timer);		/* STOP TIMER */
+            client_cpu_time += stop_cpu_time(&cpu_timer);
 			printf("Audit has ");
 			printf(audit ? "PASSED!\n" : "FAILED.\n");
 
 			//report computation time
-			fprintf(stderr, "***CLIENT COMP TIME: %f***\n", client_comp_time);
+			fprintf(stderr, "***CLIENT COMP TIME: %f***\n***CLIENT CPU  TIME: %f ***\n***CLIENT COMM TIME: %f ***\n", client_comp_time, client_cpu_time, comm_time);
 
 			// clean up
 			free(challenge1);
