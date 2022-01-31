@@ -75,7 +75,7 @@ int main(int argc, char* argv[]) {
 	while (*trash++) pathSize++;
 	fwrite(&pathSize, sizeof(pathSize), 1, fserver);
 	fwrite(actualPath, 1, pathSize, fserver);
-	printf("Wrote <%s> of size of %d\n", actualPath, pathSize);
+	printf("Wrote <%s> (pathSize of %d)\n", actualPath, pathSize);
     fflush(stdout);
 
 	// create random vector of size m and write to client config
