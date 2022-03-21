@@ -312,8 +312,8 @@ int tmain(){
     std::sort(timeaudit.begin(),timeaudit.end());
     std::sort(timeserver.begin(),timeserver.end());
 
-    std::clog << (1000.*timeinit[iters/2]) << " ms\t: [SETUP] [PRIVATE] " << k  << " : " << mediandeviation(timeinit) << "% (" << iters << ')' << std::endl;
-    std::clog << (1000.*timeserver[iters/2]) << " ms\t: [AUDIT SERVER] [PRIVATE] " << k  << " : " << mediandeviation(timeserver) << "% (" << iters << ')' << std::endl;
+    std::clog << (timeinit[iters/2]) << " s\t: [SETUP] [PRIVATE] " << k  << " : " << mediandeviation(timeinit) << "% (" << iters << ')' << std::endl;
+    std::clog << (timeserver[iters/2]) << " s\t: [AUDIT SERVER] [PRIVATE] " << k  << " : " << mediandeviation(timeserver) << "% (" << iters << ')' << std::endl;
     std::clog << (1000.*timeaudit[iters/2]) << " ms\t: [AUDIT CLIENT] [PRIVATE] " << k  << " : " << mediandeviation(timeaudit) << "% (" << iters << ')' << std::endl;
 
 	if (runPublic) {
@@ -331,8 +331,8 @@ int tmain(){
     std::sort(timeaudit.begin(),timeaudit.end());
     std::sort(timeserver.begin(),timeserver.end());
 
-    std::clog << (1000.*timeinit[iters/2]) << " ms\t: [SETUP] [PUBLIC] " << k  << " : " << mediandeviation(timeinit) << "% (" << iters << ')' << std::endl;
-    std::clog << (1000.*timeserver[iters/2]) << " ms\t: [AUDIT SERVER] [PUBLIC] " << k  << " : " << mediandeviation(timeserver) << "% (" << iters << ')' << std::endl;
+    std::clog << (timeinit[iters/2]) << " s\t: [SETUP] [PUBLIC] " << k  << " : " << mediandeviation(timeinit) << "% (" << iters << ')' << std::endl;
+    std::clog << (timeserver[iters/2]) << " s\t: [AUDIT SERVER] [PUBLIC] " << k  << " : " << mediandeviation(timeserver) << "% (" << iters << ')' << std::endl;
     std::clog << (1000.*timeaudit[iters/2]) << " ms\t: [AUDIT CLIENT] [PUBLIC] " << k  << " : " << mediandeviation(timeaudit) << "% (" << iters << ')' << std::endl;
 	}
 
