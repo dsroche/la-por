@@ -2,6 +2,8 @@
 // first arg is config file
 // second arg is merkle file
 // third arg is port number to listen on
+#define POR_MMAP
+
 #include "integrity.h"
 #include <signal.h>
 #include <getopt.h>
@@ -9,6 +11,9 @@
 #include <omp.h>
 #include <fcntl.h>
 #include <unistd.h>
+#ifdef POR_MMAP
+#include <sys/mman.h>
+#endif
 
 int server;
 int clientfd;
@@ -39,6 +44,7 @@ uint64_t retrieveAndSend(uint64_t index, FILE* data, FILE* sock);
 bool read_hash(uint64_t index, char* hash, FILE* merkle, const store_info_t* info);
 bool send_blocks(uint64_t offset, uint64_t count, uint32_t lbsize, FILE* data, FILE* sock, const store_info_t* info);
 void my_fwrite_rreq(read_req_t* rreq, uint64_t bufsize, FILE* sock, const store_info_t* info);
+
 
 int main(int argc, char* argv[]) {
 
@@ -181,7 +187,11 @@ done_opts:
 					/*audit stuff*/
 					{
 						fprintf(stderr, "Entering Audit Mode...\n");
+#ifdef POR_MMAP
+						fprintf(stderr, "using mmap for file reads\n");
+#else // no MMAP
 						fprintf(stderr, "using pread for file reads\n");
+#endif // POR_MMAP
 
 						uint64_t *challenge1 = malloc(n * sizeof *challenge1);
 						uint64_t *dot_prods1 = malloc(m * sizeof *dot_prods1);
@@ -197,6 +207,9 @@ done_opts:
 						start_time(&timer);
 						start_cpu_time(&cpu_timer);
 
+						struct timespec sread_cpu, sread_comp;
+						double * sread_cpu_time = malloc(m * sizeof *sread_cpu_time);
+						double * sread_comp_time = malloc(m * sizeof *sread_comp_time);
 						struct stat s;
 						stat(path, &s);
 						uint64_t filenm = s.st_size;
@@ -204,34 +217,40 @@ done_opts:
 						assert (n % 8 == 0);
 						static const uint64_t CHUNK_MASK = (UINT64_C(1) << (8 * BYTES_UNDER_P)) - 1;
 
-                        int nbthreads=0;
 #pragma omp parallel
-#pragma omp single
-                        nbthreads = omp_get_num_threads();
-                        const int sblocks = m/nbthreads;
-                        const int bblocks = sblocks+1;
-                        const int nbbbloc = m-sblocks*nbthreads;
-                        const int nbsbloc = nbthreads-nbbbloc;
-
-                        fprintf(stderr, "m: %ld, Threads: %d, Block-size: %d, Large-size: %d, #small: %d, #large: %d\n", m, nbthreads, sblocks, bblocks, nbsbloc, nbbbloc);
-
-
-#pragma omp parallel for
-                        for(size_t t=0; t<nbthreads; ++t) {
-                            const int myblocksize = (t>nbsbloc?bblocks:sblocks);
-                            const int mystartpoint = (t>nbsbloc? (nbsbloc*sblocks+(t-nbsbloc)*bblocks): t*sblocks);
-                            const int myendpoint = mystartpoint+myblocksize;
-
-							fprintf(stderr, "thread %d, oof %d, starting %d matrix-vector mul at %d\n", omp_get_thread_num(), nbthreads, myblocksize, mystartpoint);
+						{
+							fprintf(stderr, "thread %d starting matrix-vector mul\n", omp_get_thread_num());
 							int fd = open(path, O_RDONLY);
 							assert (fd >= 0);
+#ifdef POR_MMAP
+							void *fdmap = mmap(NULL, filenm, PROT_READ, MAP_PRIVATE, fd, 0);
+							assert (fdmap != MAP_FAILED);
+							close(fd);
+#else // no MMAP
 							uint64_t *raw_row = malloc(bytes_per_row);
 							assert (raw_row);
+#endif // POR_MMAP
 
-
-							for (size_t i = mystartpoint; i < myendpoint; ++i) {
+#pragma omp for schedule(static) nowait
+							for (size_t i = 0; i < m; ++i) {
 								// get a pointer to the row
+                            start_time(&sread_comp);
+                            start_cpu_time(&sread_cpu);
+#ifdef POR_MMAP
+								uint64_t *raw_row;
+								if (i < m-1) {
+									raw_row = fdmap + (bytes_per_row * i);
+								}
+								else {
+									raw_row = calloc(bytes_per_row, 1);
+									memcpy(raw_row, fdmap + (bytes_per_row * i), filenm - (bytes_per_row * i));
+								}
+#else // no MMAP
 								my_pread(fd, raw_row, bytes_per_row, bytes_per_row * i);
+#endif // POR_MMAP
+                            sread_comp_time[i] = stop_time(&sread_comp);
+                            sread_cpu_time[i] = stop_cpu_time(&sread_cpu);
+
 								// XXX: this part assumes BYTES_UNDER_P equals 7
 								// dot product accross the row, 56 bytes (8 chunks) at a time
 								uint128_t row_val = 0;
@@ -259,16 +278,23 @@ done_opts:
 
 								// mod final result and save to shared vector
 								dot_prods1[i] = row_val % P57;
-                            }
 
+#ifdef POR_MMAP
+								if (i == m-1) {
+									free(raw_row);
+								}
+#endif // POR_MMAP
+							}
+
+#ifdef POR_MMAP
+							munmap(fdmap, filenm);
+#else // no MMAP
 							free(raw_row);
 							close(fd);
+#endif // POR_MMAP
 
 							fprintf(stderr, "thread %d finished matrix-vector mul\n", omp_get_thread_num());
-                       }
-
-
-
+						}
 
 						double server_cpu_time = stop_cpu_time(&cpu_timer);
 						double server_comp_time = stop_time(&timer);
@@ -285,6 +311,18 @@ done_opts:
 						comm_time+= stop_time(&timer);
 						fprintf(stderr, "***SERVER COMP TIME: %f ***\n***SERVER CPU  TIME: %f ***\n***SERVER COMM TIME: %f ***\n", server_comp_time, server_cpu_time, comm_time);
 
+                        double sread_comp_max = 0.0;
+                        double sread_cpu_tot = 0.0;
+                        for (size_t i = 0; i < m; ++i) {
+                            if (sread_comp_time[i]>sread_comp_max)
+                                sread_comp_max = sread_comp_time[i];
+                            sread_cpu_tot += sread_cpu_time[i];
+                        }
+
+                        fprintf(stderr, "***SERVER READ COMP TIME: %f ***\n***SERVER READ CPU  TIME: %f ***\n", sread_comp_max, sread_cpu_tot);
+                        
+                        free(sread_cpu_time);
+                        free(sread_comp_time);
 						free(challenge1);
 						free(dot_prods1);
 					}
