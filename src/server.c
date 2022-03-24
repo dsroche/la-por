@@ -207,9 +207,15 @@ done_opts:
 						start_time(&timer);
 						start_cpu_time(&cpu_timer);
 
-						struct timespec sread_cpu, sread_comp;
-						double * sread_cpu_time = malloc(m * sizeof *sread_cpu_time);
-						double * sread_comp_time = malloc(m * sizeof *sread_comp_time);
+                        int nt=1;
+#pragma omp parallel
+#pragma omp single
+                        nt = omp_get_num_threads();
+                        
+						struct timespec * sread_cpu = malloc(m * sizeof *sread_cpu);
+                        struct timespec * sread_comp = malloc(m * sizeof *sread_comp);
+						double * sread_cpu_time = malloc(nt * sizeof *sread_cpu_time);
+						double * sread_comp_time = malloc(nt * sizeof *sread_comp_time);
 						struct stat s;
 						stat(path, &s);
 						uint64_t filenm = s.st_size;
@@ -234,8 +240,8 @@ done_opts:
 #pragma omp for schedule(static) nowait
 							for (size_t i = 0; i < m; ++i) {
 								// get a pointer to the row
-                            start_time(&sread_comp);
-                            start_cpu_time(&sread_cpu);
+                            start_time(&sread_comp[i]);
+                            start_cpu_time(&sread_cpu[i]);
 #ifdef POR_MMAP
 								uint64_t *raw_row;
 								if (i < m-1) {
@@ -248,8 +254,8 @@ done_opts:
 #else // no MMAP
 								my_pread(fd, raw_row, bytes_per_row, bytes_per_row * i);
 #endif // POR_MMAP
-                            sread_comp_time[i] = stop_time(&sread_comp);
-                            sread_cpu_time[i] = stop_cpu_time(&sread_cpu);
+                            sread_comp_time[omp_get_thread_num()] += stop_time(&sread_comp[i]);
+                            sread_cpu_time[omp_get_thread_num()] += stop_cpu_time(&sread_cpu[i]);
 
 								// XXX: this part assumes BYTES_UNDER_P equals 7
 								// dot product accross the row, 56 bytes (8 chunks) at a time
@@ -313,7 +319,7 @@ done_opts:
 
                         double sread_comp_max = 0.0;
                         double sread_cpu_tot = 0.0;
-                        for (size_t i = 0; i < m; ++i) {
+                        for (size_t i = 0; i < nt; ++i) {
                             if (sread_comp_time[i]>sread_comp_max)
                                 sread_comp_max = sread_comp_time[i];
                             sread_cpu_tot += sread_cpu_time[i];
@@ -323,6 +329,8 @@ done_opts:
                         
                         free(sread_cpu_time);
                         free(sread_comp_time);
+                        free(sread_cpu);
+                        free(sread_comp);
 						free(challenge1);
 						free(dot_prods1);
 					}
