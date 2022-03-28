@@ -2,8 +2,6 @@
 // first arg is config file
 // second arg is merkle file
 // third arg is port number to listen on
-#define POR_MMAP
-
 #include "integrity.h"
 #include <signal.h>
 #include <getopt.h>
@@ -211,7 +209,7 @@ done_opts:
 #pragma omp parallel
 #pragma omp single
                         nt = omp_get_num_threads();
-                        
+
 						struct timespec * sread_cpu = malloc(m * sizeof *sread_cpu);
                         struct timespec * sread_comp = malloc(m * sizeof *sread_comp);
 						double * sread_cpu_time = malloc(nt * sizeof *sread_cpu_time);
@@ -318,15 +316,16 @@ done_opts:
 						fprintf(stderr, "***SERVER COMP TIME: %f ***\n***SERVER CPU  TIME: %f ***\n***SERVER COMM TIME: %f ***\n", server_comp_time, server_cpu_time, comm_time);
 
                         double sread_comp_max = 0.0;
-                        double sread_cpu_tot = 0.0;
+                        double sread_cpu_max = 0.0;
                         for (size_t i = 0; i < nt; ++i) {
                             if (sread_comp_time[i]>sread_comp_max)
                                 sread_comp_max = sread_comp_time[i];
-                            sread_cpu_tot += sread_cpu_time[i];
+                            if (sread_cpu_time[i]>sread_cpu_max)
+	sread_cpu_max = sread_cpu_time[i];
                         }
 
-                        fprintf(stderr, "***SERVER READ COMP TIME: %f ***\n***SERVER READ CPU  TIME: %f ***\n", sread_comp_max, sread_cpu_tot);
-                        
+                        fprintf(stderr, "***SERVER READ COMP TIME: %f ***\n***SERVER READ CPU  TIME: %f ***\n", sread_comp_max, sread_cpu_max);
+
                         free(sread_cpu_time);
                         free(sread_comp_time);
                         free(sread_cpu);
